@@ -122,11 +122,20 @@ export default function DashboardPage() {
   const minutesReserved = useMemo(() => {
     if (!user || !selectedTurno) return 0;
     const { start, end } = getTurnoDateRange(selectedTurno);
+    const today = new Date();
+    const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+    const todayEnd = new Date(todayStart.getTime() + 24 * 60 * 60 * 1000);
+    
     return allReservas
       .filter(r => {
         const isMyReservation = user.isGuest ? r.user_name === user.name : r.user_id === user.id;
         const reservaStart = new Date(r.start_time);
-        return isMyReservation && reservaStart >= start && reservaStart < end;
+        // Filtrar solo reservas de hoy y dentro del turno
+        return isMyReservation && 
+               reservaStart >= start && 
+               reservaStart < end &&
+               reservaStart >= todayStart &&
+               reservaStart < todayEnd;
       })
       .reduce((acc, r) => acc + r.duration_minutes, 0);
   }, [allReservas, user, selectedTurno]);

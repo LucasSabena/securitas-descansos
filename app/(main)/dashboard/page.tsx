@@ -82,6 +82,10 @@ export default function DashboardPage() {
   // Estados para horario personalizado
   const [customTime, setCustomTime] = useState('')
   const [customDuration, setCustomDuration] = useState(10)
+  
+  // Estado para reservas de ayer
+  const [yesterdayReservations, setYesterdayReservations] = useState<Reserva[]>([])
+  const [loadingYesterday, setLoadingYesterday] = useState(true)
 
   useEffect(() => {
     const timer = setInterval(() => setCurrentTime(new Date()), 60000);
@@ -134,6 +138,38 @@ export default function DashboardPage() {
     };
     fetchUserProfile();
   }, [supabase]);
+
+  // Fetch reservas de ayer para el botón "repetir"
+  useEffect(() => {
+    if (!user) return;
+    
+    const fetchYesterdayReservations = async () => {
+      setLoadingYesterday(true);
+      const yesterday = new Date();
+      yesterday.setDate(yesterday.getDate() - 1);
+      yesterday.setHours(0, 0, 0, 0);
+      
+      const endOfYesterday = new Date(yesterday);
+      endOfYesterday.setHours(23, 59, 59, 999);
+
+      const { data, error } = await supabase
+        .from('reservas')
+        .select('*')
+        .eq(user.isGuest ? 'user_name' : 'user_id', user.isGuest ? user.name : user.id)
+        .gte('start_time', yesterday.toISOString())
+        .lte('start_time', endOfYesterday.toISOString())
+        .order('start_time', { ascending: true });
+
+      if (error) {
+        console.error('Error fetching yesterday reservations:', error);
+      } else {
+        setYesterdayReservations(data || []);
+      }
+      setLoadingYesterday(false);
+    };
+
+    fetchYesterdayReservations();
+  }, [user, supabase]);
 
   useEffect(() => {
     if (!user) return;
@@ -302,6 +338,83 @@ export default function DashboardPage() {
       setCustomDuration(10);
     }
   }, [user, customTime, customDuration, selectedTurno, minutesReserved, filteredReservas, supabase]);
+
+  const handleRepeatYesterday = useCallback(async () => {
+    if (!user || !selectedTurno || yesterdayReservations.length === 0) return;
+
+    const loadingToast = toast.loading('Repitiendo reservas de ayer...');
+    let successCount = 0;
+    let errorCount = 0;
+
+    for (const yesterdayReserva of yesterdayReservations) {
+      try {
+        // Convertir la hora de ayer a la hora de hoy
+        const yesterdayStart = new Date(yesterdayReserva.start_time);
+        
+        // Crear nueva fecha para hoy con la misma hora
+        const today = new Date();
+        const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 
+          yesterdayStart.getHours(), yesterdayStart.getMinutes(), 0, 0);
+        const todayEnd = new Date(todayStart.getTime() + yesterdayReserva.duration_minutes * 60000);
+
+        // Verificar que esté dentro del turno seleccionado
+        const { start, end } = getTurnoDateRange(selectedTurno);
+        if (todayStart < start || todayEnd > end) {
+          errorCount++;
+          continue;
+        }
+
+        // Verificar conflictos
+        const hasConflict = filteredReservas.some(r => {
+          const existingStart = new Date(r.start_time).getTime();
+          const existingEnd = new Date(r.end_time).getTime();
+          const newStart = todayStart.getTime();
+          const newEnd = todayEnd.getTime();
+          return (newStart < existingEnd && newEnd > existingStart);
+        });
+
+        if (hasConflict) {
+          errorCount++;
+          continue;
+        }
+
+        // Crear la nueva reserva
+        const newReserva = {
+          user_id: user.isGuest ? null : user.id,
+          user_name: user.name,
+          shift: selectedTurno.label,
+          start_time: todayStart.toISOString(),
+          end_time: todayEnd.toISOString(),
+          duration_minutes: yesterdayReserva.duration_minutes
+        };
+
+        const { data, error } = await supabase.from('reservas').insert([newReserva]).select();
+        
+        if (error) {
+          errorCount++;
+          console.error('Error creating repeated reservation:', error);
+        } else {
+          successCount++;
+          if (data) {
+            setAllReservas(current => [...current, ...data]);
+          }
+        }
+      } catch (error) {
+        errorCount++;
+        console.error('Error processing yesterday reservation:', error);
+      }
+    }
+
+    toast.dismiss(loadingToast);
+    
+    if (successCount > 0 && errorCount === 0) {
+      toast.success(`¡${successCount} reserva(s) repetida(s) exitosamente!`);
+    } else if (successCount > 0 && errorCount > 0) {
+      toast.success(`${successCount} reserva(s) creada(s), ${errorCount} fallaron por conflictos`);
+    } else {
+      toast.error('No se pudieron repetir las reservas (conflictos de horario)');
+    }
+  }, [user, selectedTurno, yesterdayReservations, filteredReservas, supabase]);
   
   const handleLogout = async () => {
     if (user && !user.isGuest) await supabase.auth.signOut();
@@ -386,6 +499,39 @@ export default function DashboardPage() {
               </div>
             </div>
 
+            {/* Repetir reservas de ayer */}
+            {!loadingYesterday && yesterdayReservations.length > 0 && (
+              <div className="mb-6 p-4 bg-bg-primary rounded-lg border border-border-subtle">
+                <div className="flex items-center justify-between mb-3">
+                  <div>
+                    <h3 className="text-sm font-semibold text-text-primary mb-1 flex items-center gap-2">
+                      <ReloadIcon className="w-4 h-4" />
+                      Lo mismo de ayer
+                    </h3>
+                    <p className="text-xs text-text-secondary">
+                      Ayer descansaste en estos horarios:
+                    </p>
+                  </div>
+                  <button
+                    onClick={handleRepeatYesterday}
+                    className="px-4 py-2 bg-accent text-on-primary font-semibold rounded-lg hover:opacity-90 transition-opacity flex items-center gap-2"
+                  >
+                    <ReloadIcon className="w-4 h-4" />
+                    Repetir todo
+                  </button>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {yesterdayReservations.map((reserva, index) => (
+                    <span
+                      key={index}
+                      className="px-3 py-1 bg-text-secondary/10 text-text-primary rounded-full text-xs font-medium"
+                    >
+                      {new Date(reserva.start_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} - {new Date(reserva.end_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} ({reserva.duration_minutes}min)
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
 
             
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">

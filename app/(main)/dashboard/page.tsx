@@ -53,6 +53,10 @@ export default function DashboardPage() {
   const [timeSlots, setTimeSlots] = useState<Date[]>([])
   const [selectedSlots, setSelectedSlots] = useState<Date[]>([])
   const [currentTime, setCurrentTime] = useState(new Date())
+  
+  // Estados para horario personalizado
+  const [customTime, setCustomTime] = useState('')
+  const [customDuration, setCustomDuration] = useState(10)
 
   useEffect(() => {
     const timer = setInterval(() => setCurrentTime(new Date()), 60000);
@@ -200,6 +204,75 @@ export default function DashboardPage() {
       }
     }
   }, [user, allReservas, supabase]);
+
+  const handleCustomReservation = useCallback(async () => {
+    if (!user || !customTime || !selectedTurno) {
+      toast.error('Por favor completa la hora de inicio');
+      return;
+    }
+
+    // Validar que no exceda el límite de minutos
+    if (minutesReserved + customDuration > MAX_MINUTES) {
+      toast.error(`Solo puedes reservar ${MAX_MINUTES - minutesReserved} minutos más`);
+      return;
+    }
+
+    // Crear fecha y hora de inicio
+    const { start: turnoStart } = getTurnoDateRange(selectedTurno);
+    const [hours, minutes] = customTime.split(':').map(Number);
+    const startTime = new Date(turnoStart);
+    startTime.setHours(hours, minutes, 0, 0);
+    
+    // Calcular hora de fin
+    const endTime = new Date(startTime.getTime() + customDuration * 60000);
+
+    // Validar que esté dentro del turno
+    const { start, end } = getTurnoDateRange(selectedTurno);
+    if (startTime < start || endTime > end) {
+      toast.error(`El horario debe estar dentro del turno ${selectedTurno.label}`);
+      return;
+    }
+
+    // Verificar conflictos con reservas existentes
+    const hasConflict = filteredReservas.some(r => {
+      const existingStart = new Date(r.start_time).getTime();
+      const existingEnd = new Date(r.end_time).getTime();
+      const newStart = startTime.getTime();
+      const newEnd = endTime.getTime();
+      
+      return (newStart < existingEnd && newEnd > existingStart);
+    });
+
+    if (hasConflict) {
+      toast.error('Este horario se solapa con otra reserva existente');
+      return;
+    }
+
+    const loadingToast = toast.loading('Creando reserva personalizada...');
+    
+    const newReserva = {
+      user_id: user.isGuest ? null : user.id,
+      user_name: user.name,
+      shift: selectedTurno.label,
+      start_time: startTime.toISOString(),
+      end_time: endTime.toISOString(),
+      duration_minutes: customDuration
+    };
+
+    const { data, error } = await supabase.from('reservas').insert([newReserva]).select();
+    toast.dismiss(loadingToast);
+    
+    if (error) {
+      toast.error('Error: ' + error.message);
+    } else {
+      toast.success(`¡Reserva creada para las ${customTime}!`);
+      if (data) {
+        setAllReservas(current => [...current, ...data]);
+      }
+      setCustomTime('');
+      setCustomDuration(10);
+    }
+  }, [user, customTime, customDuration, selectedTurno, minutesReserved, filteredReservas, supabase]);
   
   const handleLogout = async () => {
     if (user && !user.isGuest) await supabase.auth.signOut();
@@ -305,10 +378,69 @@ export default function DashboardPage() {
           </div>
         )}
 
+        {/* Horario Personalizado */}
+        {selectedTurno && canReserveMore && (
+          <section className="p-6 bg-bg-secondary rounded-xl shadow-lg border border-border-default">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-xl font-bold">2. Crear Horario Personalizado</h2>
+              <div className="text-accent text-sm font-medium">
+                ¡Elige cualquier hora que quieras! 🎯
+              </div>
+            </div>
+            
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+              {/* Hora de inicio */}
+              <div>
+                <label className="block text-sm font-medium text-text-secondary mb-2">
+                  Hora de inicio
+                </label>
+                <input
+                  type="time"
+                  value={customTime}
+                  onChange={(e) => setCustomTime(e.target.value)}
+                  className="w-full px-4 py-2 bg-bg-primary border border-border-default rounded-lg text-text-primary focus:outline-none focus:ring-2 focus:ring-primary"
+                />
+              </div>
+
+              {/* Duración */}
+              <div>
+                <label className="block text-sm font-medium text-text-secondary mb-2">
+                  Duración (minutos disponibles: {MAX_MINUTES - minutesReserved})
+                </label>
+                <select
+                  value={customDuration}
+                  onChange={(e) => setCustomDuration(Number(e.target.value))}
+                  className="w-full px-4 py-2 bg-bg-primary border border-border-default rounded-lg text-text-primary focus:outline-none focus:ring-2 focus:ring-primary"
+                >
+                  {[5, 10, 15, 20, 25, 30].filter(min => min <= (MAX_MINUTES - minutesReserved)).map(min => (
+                    <option key={min} value={min}>{min} minutos</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Botón crear */}
+              <div className="flex items-end">
+                <button
+                  onClick={handleCustomReservation}
+                  disabled={!customTime}
+                  className="w-full px-6 py-2 bg-accent text-on-primary font-bold rounded-lg shadow-lg hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Crear Reserva
+                </button>
+              </div>
+            </div>
+
+            <div className="text-sm text-text-secondary">
+              <p>💡 <strong>Ejemplo:</strong> Si quieres salir a las 21:00 por 15 minutos, simplemente selecciona &quot;21:00&quot; y &quot;15 minutos&quot;.</p>
+              <p>📅 Tu reserva será para el turno: <strong>{selectedTurno.label}</strong></p>
+            </div>
+          </section>
+        )}
+
         {selectedTurno && (
           <section className="p-6 bg-bg-secondary rounded-xl shadow-lg border border-border-default">
             <div className="flex flex-wrap justify-between items-center mb-6 gap-4">
-              <h2 className="text-xl font-bold">2. Selecciona tus horarios</h2>
+              <h2 className="text-xl font-bold">3. O usa bloques de 10 min (método clásico)</h2>
               {selectedSlots.length > 0 && (
                 <div className="flex items-center gap-4">
                   <span className="text-sm font-semibold">{selectedSlots.length * SLOT_DURATION} mins a reservar</span>

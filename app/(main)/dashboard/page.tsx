@@ -4,6 +4,7 @@ import { createClient } from '@/lib/supabase'
 import { useRouter } from 'next/navigation'
 import toast from 'react-hot-toast'
 import { motion } from 'framer-motion'
+import { useNotifications } from '@/lib/useNotifications'
 import { 
   CalendarIcon, 
   ClockIcon, 
@@ -11,7 +12,8 @@ import {
   ReloadIcon,
   TargetIcon,
   PlusIcon,
-  TrashIcon
+  TrashIcon,
+  BellIcon
 } from '@radix-ui/react-icons'
 
 type UserProfile = { id: string; name: string; isGuest: boolean; }
@@ -86,6 +88,14 @@ export default function DashboardPage() {
   // Estado para reservas de ayer
   const [yesterdayReservations, setYesterdayReservations] = useState<Reserva[]>([])
   const [loadingYesterday, setLoadingYesterday] = useState(true)
+
+  // Hook de notificaciones
+  const { permission, isSupported, requestPermission, scheduleNotification } = useNotifications()
+  const [notificationsEnabled, setNotificationsEnabled] = useState(false)
+
+  useEffect(() => {
+    setNotificationsEnabled(permission === 'granted')
+  }, [permission])
 
   useEffect(() => {
     const timer = setInterval(() => setCurrentTime(new Date()), 60000);
@@ -331,13 +341,22 @@ export default function DashboardPage() {
       toast.error('Error: ' + error.message);
     } else {
       toast.success(`¡Reserva creada para las ${customTime}!`);
-      if (data) {
+      if (data && data.length > 0) {
         setAllReservas(current => [...current, ...data]);
+        
+        // Programar notificación si están habilitadas
+        if (notificationsEnabled) {
+          scheduleNotification(
+            data[0].id,
+            data[0].start_time,
+            `Descanso de ${customDuration} min`
+          );
+        }
       }
       setCustomTime('');
       setCustomDuration(10);
     }
-  }, [user, customTime, customDuration, selectedTurno, minutesReserved, filteredReservas, supabase]);
+  }, [user, customTime, customDuration, selectedTurno, minutesReserved, filteredReservas, supabase, notificationsEnabled, scheduleNotification]);
 
   const handleRepeatYesterday = useCallback(async () => {
     if (!user || !selectedTurno || yesterdayReservations.length === 0) return;
@@ -395,8 +414,17 @@ export default function DashboardPage() {
           console.error('Error creating repeated reservation:', error);
         } else {
           successCount++;
-          if (data) {
+          if (data && data.length > 0) {
             setAllReservas(current => [...current, ...data]);
+            
+            // Programar notificación si están habilitadas
+            if (notificationsEnabled) {
+              scheduleNotification(
+                data[0].id,
+                data[0].start_time,
+                `Descanso repetido de ${yesterdayReserva.duration_minutes} min`
+              );
+            }
           }
         }
       } catch (error) {
@@ -414,7 +442,7 @@ export default function DashboardPage() {
     } else {
       toast.error('No se pudieron repetir las reservas (conflictos de horario)');
     }
-  }, [user, selectedTurno, yesterdayReservations, filteredReservas, supabase]);
+  }, [user, selectedTurno, yesterdayReservations, filteredReservas, supabase, notificationsEnabled, scheduleNotification]);
   
   const handleLogout = async () => {
     if (user && !user.isGuest) await supabase.auth.signOut();
@@ -712,6 +740,46 @@ export default function DashboardPage() {
                     </div>
                   </div>
                 ))}
+
+                {/* Configuración de Notificaciones */}
+                <div className="mt-6 p-4 bg-bg-primary rounded-lg border border-border-subtle">
+                  <div className="flex justify-between items-center mb-3">
+                    <div className="flex items-center gap-2">
+                      <BellIcon className="w-5 h-5 text-text-secondary" />
+                      <span className="font-medium text-text-primary">Notificaciones Push</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {notificationsEnabled ? (
+                        <span className="text-xs px-2 py-1 bg-green-100 text-green-700 rounded-full">
+                          ✓ Activadas
+                        </span>
+                      ) : (
+                        <span className="text-xs px-2 py-1 bg-gray-100 text-gray-600 rounded-full">
+                          ✗ Desactivadas
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                  
+                  <div className="text-sm text-text-secondary mb-3">
+                    {isSupported ? (
+                      notificationsEnabled ? 
+                        'Recibirás un recordatorio 5 minutos antes de cada descanso.' :
+                        'Activa las notificaciones para recibir recordatorios antes de tus descansos.'
+                    ) : (
+                      'Tu navegador no soporta notificaciones push.'
+                    )}
+                  </div>
+                  
+                  {isSupported && !notificationsEnabled && (
+                    <button
+                      onClick={requestPermission}
+                      className="px-4 py-2 bg-primary text-white rounded-lg hover:opacity-90 text-sm font-medium"
+                    >
+                      Activar Notificaciones
+                    </button>
+                  )}
+                </div>
 
                 {/* Resumen del día */}
                 <div className="mt-6 p-4 bg-bg-primary rounded-lg border border-border-subtle">

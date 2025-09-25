@@ -4,6 +4,14 @@ import { createClient } from '@/lib/supabase'
 import { useRouter } from 'next/navigation'
 import toast from 'react-hot-toast'
 import { motion } from 'framer-motion'
+import { 
+  CalendarIcon, 
+  ClockIcon, 
+  PersonIcon, 
+  ReloadIcon,
+  TargetIcon,
+  PlusIcon
+} from '@radix-ui/react-icons'
 
 type UserProfile = { id: string; name: string; isGuest: boolean; }
 type Turno = { id: string; label: string; startHour: number; endHour: number; }
@@ -39,6 +47,25 @@ const getCurrentActiveTurno = () => {
   if (currentHour >= 14 && currentHour < 23) return TURNOS[1];
   if (currentHour >= 23 || currentHour < 6) return TURNOS[2];
   return TURNOS[1];
+};
+
+// Función para agrupar reservas por horas
+const groupReservasByHour = (reservas: Reserva[]) => {
+  const groups: { [key: string]: Reserva[] } = {};
+  
+  reservas
+    .sort((a, b) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime())
+    .forEach((reserva) => {
+      const hour = new Date(reserva.start_time).getHours();
+      const hourKey = `${hour.toString().padStart(2, '0')}:00`;
+      
+      if (!groups[hourKey]) {
+        groups[hourKey] = [];
+      }
+      groups[hourKey].push(reserva);
+    });
+  
+  return groups;
 };
 
 export default function DashboardPage() {
@@ -289,8 +316,9 @@ export default function DashboardPage() {
           <section className="p-6 bg-bg-secondary rounded-xl shadow-lg border border-border-default">
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-xl font-bold">2. Crear Horario Personalizado</h2>
-              <div className="text-accent text-sm font-medium">
-                ¡Elige cualquier hora que quieras! 🎯
+              <div className="text-accent text-sm font-medium flex items-center gap-2">
+                <TargetIcon className="w-4 h-4" />
+                ¡Elige cualquier hora que quieras!
               </div>
             </div>
             
@@ -337,8 +365,14 @@ export default function DashboardPage() {
             </div>
 
             <div className="text-sm text-text-secondary">
-              <p>💡 <strong>Ejemplo:</strong> Si quieres salir a las 21:00 por 15 minutos, simplemente selecciona &quot;21:00&quot; y &quot;15 minutos&quot;.</p>
-              <p>📅 Tu reserva será para el turno: <strong>{selectedTurno.label}</strong></p>
+              <p className="flex items-center gap-2">
+                <ClockIcon className="w-4 h-4" />
+                <strong>Ejemplo:</strong> Si quieres salir a las 21:00 por 15 minutos, simplemente selecciona &quot;21:00&quot; y &quot;15 minutos&quot;.
+              </p>
+              <p className="flex items-center gap-2">
+                <CalendarIcon className="w-4 h-4" />
+                Tu reserva será para el turno: <strong>{selectedTurno.label}</strong>
+              </p>
             </div>
           </section>
         )}
@@ -350,31 +384,52 @@ export default function DashboardPage() {
               <h2 className="text-xl font-bold">3. Timeline de Descansos - {selectedTurno.label}</h2>
               {!canReserveMore && (
                 <div className="text-center py-2 px-4 bg-success/20 rounded-lg border border-success/50">
-                  <p className="text-sm font-semibold text-success">✅ Límite alcanzado ({minutesReserved}/{MAX_MINUTES} min)</p>
+                  <p className="text-sm font-semibold text-success flex items-center gap-2 justify-center">
+                    <PlusIcon className="w-4 h-4" />
+                    Límite alcanzado ({minutesReserved}/{MAX_MINUTES} min)
+                  </p>
                 </div>
               )}
             </div>
 
             {loading ? (
               <div className="text-center py-8">
-                <div className="text-text-secondary">🔄 Cargando reservas...</div>
+                <div className="text-text-secondary flex items-center justify-center gap-2">
+                  <ReloadIcon className="w-4 h-4 animate-spin" />
+                  Cargando reservas...
+                </div>
               </div>
             ) : filteredReservas.length === 0 ? (
               <div className="text-center py-12 bg-bg-primary rounded-xl border border-border-subtle">
-                <div className="text-6xl mb-4">🕐</div>
+                <div className="text-6xl mb-4">
+                  <ClockIcon className="w-16 h-16 mx-auto text-text-secondary" />
+                </div>
                 <h3 className="text-xl font-semibold text-text-primary mb-2">No hay reservas aún</h3>
                 <p className="text-text-secondary">¡Sé el primero en reservar tu descanso para este turno!</p>
               </div>
             ) : (
-              <div className="space-y-4">
-                {/* Línea de tiempo visual */}
-                <div className="relative">
-                  {/* Línea base del timeline */}
-                  <div className="absolute left-8 top-0 bottom-0 w-0.5 bg-border-default"></div>
-                  
-                  {filteredReservas
-                    .sort((a, b) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime())
-                    .map((reserva, index) => {
+              <div className="space-y-6">
+                {/* Timeline agrupado por horas */}
+                {Object.entries(groupReservasByHour(filteredReservas)).map(([hourLabel, reservasInHour]) => (
+                  <div key={hourLabel} className="space-y-4">
+                    {/* Separador de hora */}
+                    <div className="flex items-center gap-4 py-2">
+                      <div className="flex-shrink-0 w-8 h-8 bg-accent text-on-primary font-bold rounded-full flex items-center justify-center text-sm">
+                        <ClockIcon className="w-4 h-4" />
+                      </div>
+                      <div className="flex-grow h-0.5 bg-border-default relative">
+                        <div className="absolute -top-2 left-4 bg-bg-secondary px-2 py-1 text-sm font-semibold text-accent">
+                          {hourLabel}
+                        </div>
+                      </div>
+                    </div>
+                    
+                    {/* Reservas de esta hora */}
+                    <div className="relative ml-4">
+                      {/* Línea vertical para conectar las reservas de esta hora */}
+                      <div className="absolute left-4 top-0 bottom-0 w-0.5 bg-border-subtle"></div>
+                      
+                      {reservasInHour.map((reserva, index) => {
                       const startTime = new Date(reserva.start_time);
                       const endTime = new Date(reserva.end_time);
                       const isMyReservation = user.isGuest ? reserva.user_name === user.name : reserva.user_id === user.id;
@@ -415,8 +470,9 @@ export default function DashboardPage() {
                                   </span>
                                 </div>
                                 
-                                <p className={`font-medium ${isMyReservation ? 'text-primary' : 'text-text-primary'}`}>
-                                  {isMyReservation ? '👤 Tu descanso' : `👥 ${reserva.user_name}`}
+                                <p className={`font-medium flex items-center gap-2 ${isMyReservation ? 'text-primary' : 'text-text-primary'}`}>
+                                  <PersonIcon className="w-4 h-4" />
+                                  {isMyReservation ? 'Tu descanso' : reserva.user_name}
                                 </p>
                               </div>
                               
@@ -427,26 +483,31 @@ export default function DashboardPage() {
                                   className="p-2 text-error hover:bg-error/10 rounded-lg transition-colors"
                                   title="Cancelar reserva"
                                 >
-                                  🗑️
+                                  ✕
                                 </button>
                               )}
                             </div>
                             
                             {/* Indicador visual de tiempo transcurrido */}
                             <div className="mt-3 flex items-center gap-2 text-xs text-text-secondary">
-                              <span>⏱️</span>
+                              <CalendarIcon className="w-3 h-3" />
                               <span>Inicio: {startTime.toLocaleDateString()}</span>
                             </div>
                           </div>
                         </motion.div>
                       )
                     })}
-                </div>
+                    </div>
+                  </div>
+                ))}
 
                 {/* Resumen del día */}
                 <div className="mt-6 p-4 bg-bg-primary rounded-lg border border-border-subtle">
                   <div className="flex justify-between items-center text-sm">
-                    <span className="text-text-secondary">📊 Resumen del turno:</span>
+                    <span className="text-text-secondary flex items-center gap-2">
+                      <CalendarIcon className="w-4 h-4" />
+                      Resumen del turno:
+                    </span>
                     <div className="flex gap-6">
                       <span className="text-text-primary">
                         <strong>{filteredReservas.length}</strong> reservas totales

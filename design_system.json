@@ -1,0 +1,101 @@
+{
+  "project": "Sistema de Reservas de Descansos - Securitas",
+  "version": "1.0.0",
+  "typography": {
+    "fontFamily": {
+      "name": "Sora",
+      "provider": "Google Fonts",
+      "importUrl": "https://fonts.googleapis.com/css2?family=Sora:wght@400;600;700&display=swap",
+      "fallback": "sans-serif"
+    },
+    "scale": {
+      "display": {
+        "mobile": "2.5rem", "tablet": "3rem", "desktop": "3.5rem", "fontWeight": 700
+      },
+      "h1": {
+        "mobile": "2rem", "tablet": "2.25rem", "desktop": "2.5rem", "fontWeight": 700
+      },
+      "h2": {
+        "mobile": "1.5rem", "tablet": "1.75rem", "desktop": "2rem", "fontWeight": 600
+      },
+      "h3": {
+        "mobile": "1.25rem", "tablet": "1.375rem", "desktop": "1.5rem", "fontWeight": 600
+      },
+      "body-large": {
+        "mobile": "1.125rem", "tablet": "1.125rem", "desktop": "1.25rem", "fontWeight": 400
+      },
+      "body-regular": {
+        "mobile": "1rem", "tablet": "1rem", "desktop": "1rem", "fontWeight": 400
+      },
+      "caption": {
+        "mobile": "0.875rem", "tablet": "0.875rem", "desktop": "0.875rem", "fontWeight": 400
+      }
+    }
+  },
+  "breakpoints": {
+    "sm": "640px",
+    "md": "768px",
+    "lg": "1024px",
+    "xl": "1280px"
+  },
+  "theme": {
+    "light": {
+      "colors": {
+        "primary": "#0033A0",
+        "secondary": "#009FE3",
+        "accent": "#FDB813",
+        "success": "#00A859",
+        "warning": "#FFAA00",
+        "error": "#D92D20"
+      },
+      "tokens": {
+        "background-primary": "#F8F9FA",
+        "background-secondary": "#FFFFFF",
+        "background-overlay": "rgba(33, 37, 41, 0.4)",
+        "text-primary": "#212529",
+        "text-secondary": "#495057",
+        "text-on-primary": "#FFFFFF",
+        "border-default": "#CED4DA",
+        "border-subtle": "#E9ECEF",
+        "interactive-primary-default": "#0033A0",
+        "interactive-primary-hover": "#00226A",
+        "interactive-secondary-default": "#009FE3",
+        "interactive-secondary-hover": "#007BB5",
+        "interactive-disabled": "#ADB5BD",
+        "status-success-background": "#E6F6EC",
+        "status-success-text": "#006434",
+        "status-error-background": "#FDEDEB",
+        "status-error-text": "#B32318"
+      }
+    },
+    "dark": {
+      "colors": {
+        "primary": "#4D94FF",
+        "secondary": "#33C1FF",
+        "accent": "#FFC740",
+        "success": "#36B37E",
+        "warning": "#FFAB00",
+        "error": "#FF5630"
+      },
+      "tokens": {
+        "background-primary": "#121212",
+        "background-secondary": "#1E1E1E",
+        "background-overlay": "rgba(0, 0, 0, 0.6)",
+        "text-primary": "#E0E0E0",
+        "text-secondary": "#A0A0A0",
+        "text-on-primary": "#000000",
+        "border-default": "#424242",
+        "border-subtle": "#2E2E2E",
+        "interactive-primary-default": "#4D94FF",
+        "interactive-primary-hover": "#80B3FF",
+        "interactive-secondary-default": "#33C1FF",
+        "interactive-secondary-hover": "#66D1FF",
+        "interactive-disabled": "#525252",
+        "status-success-background": "#1A382A",
+        "status-success-text": "#57D9A3",
+        "status-error-background": "#3D1F1A",
+        "status-error-text": "#FF8F73"
+      }
+    }
+  }
+}

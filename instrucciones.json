@@ -1,0 +1,64 @@
+{
+  "projectName": "Securitas - Planificador de Descansos",
+  "projectGoal": "Desarrollar una aplicación web para que los operadores de seguridad puedan reservar sus 30 minutos de descanso por turno, evitando conflictos de horario al permitir que solo una persona descanse a la vez.",
+  "coreProblemToSolve": "Los operadores 'reservan' sus horarios de descanso de manera informal y verbal ('cantando'), lo que genera conflictos, desorganización y la necesidad de que alguien sea el primero en reclamar un horario popular (ej. la hora de la cena).",
+  "targetUsers": "Operadores de seguridad de Securitas durante sus turnos.",
+  "techStack": [
+    {
+      "name": "Next.js (App Router)",
+      "role": "Frontend Framework",
+      "justification": "Provee una estructura robusta para aplicaciones React, con optimizaciones de rendimiento y un sistema de enrutamiento moderno. Ideal para desplegar en Vercel."
+    },
+    {
+      "name": "React",
+      "role": "UI Library",
+      "justification": "Construcción de interfaces de usuario interactivas y componentizadas."
+    },
+    {
+      "name": "TypeScript",
+      "role": "Language",
+      "justification": "Añade seguridad de tipos al código, reduce errores en tiempo de ejecución y mejora la experiencia de desarrollo."
+    },
+    {
+      "name": "Tailwind CSS",
+      "role": "CSS Framework",
+      "justification": "Permite un desarrollo de estilos rápido y consistente directamente en el JSX, perfectamente alineado con la filosofía de componentes."
+    },
+    {
+      "name": "Supabase",
+      "role": "Backend as a Service (BaaS)",
+      "justification": "Provee una base de datos PostgreSQL, autenticación de usuarios y, crucialmente, suscripciones en tiempo real. Esto elimina la necesidad de un backend personalizado y resuelve el problema de la sincronización instantánea de las reservas."
+    },
+    {
+      "name": "Vercel",
+      "role": "Hosting",
+      "justification": "Plataforma de despliegue optimizada para Next.js con integración continua desde GitHub y un generoso plan gratuito."
+    }
+  ],
+  "coreFeatures": [
+    "Autenticación de usuarios (cada operador tiene su cuenta).",
+    "Selección del turno actual (ej: 6:45 a 14:45).",
+    "Visualización de una línea de tiempo con los bloques de 10 minutos del turno.",
+    "Muestra de bloques ya reservados por otros operadores en tiempo real.",
+    "Lógica de reserva que permite elegir 1x30min, 2x15min o 3x10min.",
+    "Validación para no exceder los 30 minutos totales por turno.",
+    "El sistema opera bajo el principio 'primero en llegar, primero en ser servido' (First-Come, First-Served)."
+  ],
+  "keyLogicImplementation": {
+    "realtimeSync": "Se utiliza la funcionalidad de 'Realtime Subscriptions' de Supabase. El frontend se suscribe a los cambios (inserciones, eliminaciones) en la tabla 'reservas'. Cuando un usuario reserva un horario, la base de datos notifica a todos los clientes conectados, que actualizan su UI al instante.",
+    "concurrencyControl": "La lógica para evitar reservas duplicadas ('race conditions') se maneja a nivel de base de datos, preferiblemente con una Política de Seguridad a Nivel de Fila (RLS) o una función de PostgreSQL que verifique la no existencia de una reserva solapada antes de permitir la inserción. La primera escritura válida gana."
+  },
+  "dataSchema": {
+    "table": "reservas",
+    "columns": [
+      { "name": "id", "type": "uuid", "primary_key": true },
+      { "name": "created_at", "type": "timestamp with time zone", "default": "now()" },
+      { "name": "user_id", "type": "uuid", "foreign_key": "auth.users.id" },
+      { "name": "user_name", "type": "text", "description": "Nombre del operador para mostrar en la UI." },
+      { "name": "shift", "type": "text", "description": "Describe el turno, ej. '14:45-23:45'" },
+      { "name": "start_time", "type": "timestamp with time zone", "description": "Inicio exacto del bloque de descanso." },
+      { "name": "end_time", "type": "timestamp with time zone", "description": "Fin exacto del bloque de descanso." },
+      { "name": "duration_minutes", "type": "integer", "description": "Duración del bloque (10, 15, o 30)." }
+    ]
+  }
+}

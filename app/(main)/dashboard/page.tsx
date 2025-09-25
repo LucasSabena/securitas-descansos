@@ -10,7 +10,8 @@ import {
   PersonIcon, 
   ReloadIcon,
   TargetIcon,
-  PlusIcon
+  PlusIcon,
+  TrashIcon
 } from '@radix-ui/react-icons'
 
 type UserProfile = { id: string; name: string; isGuest: boolean; }
@@ -118,6 +119,66 @@ export default function DashboardPage() {
 
   const canReserveMore = minutesReserved < MAX_MINUTES;
 
+  // Obtener duraciones de las reservas existentes del usuario para este turno
+  const myReservationDurations = useMemo(() => {
+    if (!user || !selectedTurno) return [];
+    const { start, end } = getTurnoDateRange(selectedTurno);
+    return allReservas
+      .filter(r => {
+        const isMyReservation = user.isGuest ? r.user_name === user.name : r.user_id === user.id;
+        const reservaStart = new Date(r.start_time);
+        return isMyReservation && reservaStart >= start && reservaStart < end;
+      })
+      .map(r => r.duration_minutes);
+  }, [allReservas, user, selectedTurno]);
+
+  // Calcular opciones de duración válidas basadas en las reservas existentes
+  const availableDurations = useMemo(() => {
+    if (myReservationDurations.length === 0) {
+      return [10, 15, 30]; // Si no hay reservas, puede elegir cualquiera
+    }
+
+    // Contar cuántas reservas de cada duración tiene
+    const counts: { [key: number]: number } = { 10: 0, 15: 0, 30: 0 };
+    myReservationDurations.forEach(duration => {
+      if (duration in counts) {
+        counts[duration]++;
+      }
+    });
+
+    const availableOptions: number[] = [];
+
+    // Reglas de combinación:
+    // - Máximo 1 de 30 min
+    // - Máximo 2 de 15 min  
+    // - Máximo 3 de 10 min
+    if (counts[30] === 0 && counts[15] === 0 && counts[10] === 0) {
+      return [10, 15, 30]; // Primera reserva, puede elegir cualquiera
+    }
+    
+    if (counts[30] > 0) {
+      return []; // Ya tiene una de 30, no puede agregar más
+    }
+    
+    if (counts[15] > 0) {
+      if (counts[15] < 2) {
+        availableOptions.push(15); // Puede agregar una más de 15
+      }
+      // No puede agregar de 10 si ya tiene de 15
+      return availableOptions;
+    }
+    
+    if (counts[10] > 0) {
+      if (counts[10] < 3) {
+        availableOptions.push(10); // Puede agregar más de 10
+      }
+      // No puede agregar de 15 o 30 si ya tiene de 10
+      return availableOptions;
+    }
+
+    return availableOptions;
+  }, [myReservationDurations]);
+
   useEffect(() => {
     const fetchUserProfile = async () => {
       const { data: { session } } = await supabase.auth.getSession();
@@ -153,19 +214,36 @@ export default function DashboardPage() {
 
 
   const handleDeleteReservation = useCallback(async (reservationId: string) => {
-    if (!user || user.isGuest) return;
-    const isConfirmed = confirm('¿Estás seguro de que quieres cancelar esta reserva?');
+    if (!user) return;
+    
+    // Verificar que la reserva pertenezca al usuario actual
+    const reservaToDelete = allReservas.find(r => r.id === reservationId);
+    if (!reservaToDelete) return;
+    
+    const isMyReservation = user.isGuest 
+      ? reservaToDelete.user_name === user.name 
+      : reservaToDelete.user_id === user.id;
+    
+    if (!isMyReservation) {
+      toast.error('No puedes borrar reservas de otros usuarios');
+      return;
+    }
+
+    const isConfirmed = confirm('¿Estás seguro de que quieres borrar este descanso?');
     if (isConfirmed) {
-      const loadingToast = toast.loading('Cancelando reserva...');
+      const loadingToast = toast.loading('Borrando descanso...');
       const originalReservas = allReservas;
       setAllReservas(current => current.filter(r => r.id !== reservationId));
+      
       const { error } = await supabase.from('reservas').delete().eq('id', reservationId);
       toast.dismiss(loadingToast);
+      
       if (error) {
-        toast.error('Error al cancelar. Restaurando...');
+        toast.error('Error al borrar. Restaurando...');
         setAllReservas(originalReservas);
+        console.error('Error deleting reservation:', error);
       } else {
-        toast.success('Reserva cancelada.');
+        toast.success('Descanso borrado correctamente');
       }
     }
   }, [user, allReservas, supabase]);
@@ -173,6 +251,12 @@ export default function DashboardPage() {
   const handleCustomReservation = useCallback(async () => {
     if (!user || !customTime || !selectedTurno) {
       toast.error('Por favor completa la hora de inicio');
+      return;
+    }
+
+    // Validar que la duración sea válida según las reglas de combinación
+    if (!availableDurations.includes(customDuration)) {
+      toast.error('Esta duración no es válida según tus reservas existentes');
       return;
     }
 
@@ -237,7 +321,14 @@ export default function DashboardPage() {
       setCustomTime('');
       setCustomDuration(10);
     }
-  }, [user, customTime, customDuration, selectedTurno, minutesReserved, filteredReservas, supabase]);
+  }, [user, customTime, customDuration, selectedTurno, minutesReserved, filteredReservas, supabase, availableDurations]);
+
+  // Ajustar customDuration si la opción actual no está disponible
+  useEffect(() => {
+    if (availableDurations.length > 0 && !availableDurations.includes(customDuration)) {
+      setCustomDuration(availableDurations[0]);
+    }
+  }, [availableDurations, customDuration]);
   
   const handleLogout = async () => {
     if (user && !user.isGuest) await supabase.auth.signOut();
@@ -321,6 +412,23 @@ export default function DashboardPage() {
                 ¡Elige cualquier hora que quieras!
               </div>
             </div>
+
+            {/* Reglas de duración */}
+            <div className="mb-4 p-3 bg-bg-primary rounded-lg border border-border-subtle">
+              <h4 className="text-sm font-semibold text-text-primary mb-2 flex items-center gap-2">
+                <ClockIcon className="w-4 h-4" />
+                Reglas de duración:
+              </h4>
+              <div className="text-xs text-text-secondary space-y-1">
+                <p>• Puedes elegir <strong>una</strong> reserva de 30 min <strong>ó</strong></p>
+                <p>• <strong>Dos</strong> reservas de 15 min cada una <strong>ó</strong></p>
+                <p>• <strong>Tres</strong> reservas de 10 min cada una</p>
+                <p className="text-accent mt-2 flex items-center gap-2">
+                  <TargetIcon className="w-3 h-3" />
+                  Una vez que eliges una duración, solo puedes agregar más de la misma duración
+                </p>
+              </div>
+            </div>
             
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
               {/* Hora de inicio */}
@@ -345,10 +453,15 @@ export default function DashboardPage() {
                   value={customDuration}
                   onChange={(e) => setCustomDuration(Number(e.target.value))}
                   className="w-full px-4 py-2 bg-bg-primary border border-border-default rounded-lg text-text-primary focus:outline-none focus:ring-2 focus:ring-primary"
+                  disabled={availableDurations.length === 0}
                 >
-                  {[5, 10, 15, 20, 25, 30].filter(min => min <= (MAX_MINUTES - minutesReserved)).map(min => (
-                    <option key={min} value={min}>{min} minutos</option>
-                  ))}
+                  {availableDurations.length === 0 ? (
+                    <option disabled>No hay opciones disponibles</option>
+                  ) : (
+                    availableDurations.map(min => (
+                      <option key={min} value={min}>{min} minutos</option>
+                    ))
+                  )}
                 </select>
               </div>
 
@@ -477,13 +590,13 @@ export default function DashboardPage() {
                               </div>
                               
                               {/* Botón de eliminar solo para mis reservas */}
-                              {isMyReservation && !user.isGuest && (
+                              {isMyReservation && (
                                 <button
                                   onClick={() => handleDeleteReservation(reserva.id)}
-                                  className="p-2 text-error hover:bg-error/10 rounded-lg transition-colors"
-                                  title="Cancelar reserva"
+                                  className="p-2 text-error hover:bg-error/10 rounded-lg transition-colors flex items-center gap-1"
+                                  title="Borrar este descanso"
                                 >
-                                  ✕
+                                  <TrashIcon className="w-4 h-4" />
                                 </button>
                               )}
                             </div>

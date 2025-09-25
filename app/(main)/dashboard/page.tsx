@@ -1,5 +1,5 @@
 'use client'
-import { useEffect, useState, useMemo } from 'react'
+import { useEffect, useState, useMemo, useCallback } from 'react'
 import { createClient } from '@/lib/supabase'
 import { useRouter } from 'next/navigation'
 import toast from 'react-hot-toast'
@@ -19,17 +19,17 @@ const MAX_MINUTES = 30;
 
 const getTurnoDateRange = (turno: Turno): { start: Date; end: Date } => {
   const now = new Date();
-  const turnoStart = new Date(now.getFullYear(), now.getMonth(), now.getDate(), turno.startHour, 45, 0, 0);
+  let turnoStart = new Date(now.getFullYear(), now.getMonth(), now.getDate(), turno.startHour, 45, 0, 0);
   
-  if (turno.id === 'noche') {
-    if (now.getHours() < 7) {
-      turnoStart.setDate(turnoStart.getDate() - 1);
-    }
+  if (turno.id === 'noche' && now.getHours() < 7) {
+    turnoStart = new Date(turnoStart.getTime() - 24 * 60 * 60 * 1000); // Subtract 1 day
   }
   
   const endHour = turno.endHour >= 24 ? turno.endHour - 24 : turno.endHour;
-  const turnoEnd = new Date(turnoStart.getFullYear(), turnoStart.getMonth(), turnoStart.getDate(), endHour, 45, 0, 0);
-  if(turno.endHour >= 24) turnoEnd.setDate(turnoEnd.getDate() + 1);
+  let turnoEnd = new Date(turnoStart.getFullYear(), turnoStart.getMonth(), turnoStart.getDate(), endHour, 45, 0, 0);
+  if(turno.endHour >= 24) {
+    turnoEnd = new Date(turnoEnd.getTime() + 24 * 60 * 60 * 1000); // Add 1 day
+  }
 
   return { start: turnoStart, end: turnoEnd };
 }
@@ -124,19 +124,18 @@ export default function DashboardPage() {
     if (!selectedTurno) return;
     const { start: turnoStart } = getTurnoDateRange(selectedTurno);
     const slots: Date[] = [];
-    const start = new Date(turnoStart);
-    const end = new Date(start);
-    end.setHours(end.getHours() + 9);
+    let currentTime = turnoStart.getTime();
+    const endTime = currentTime + (9 * 60 * 60 * 1000); // 9 hours in milliseconds
 
-    while (start < end) {
-      slots.push(new Date(start));
-      start.setMinutes(start.getMinutes() + SLOT_DURATION);
+    while (currentTime < endTime) {
+      slots.push(new Date(currentTime));
+      currentTime += SLOT_DURATION * 60 * 1000; // Add SLOT_DURATION minutes in milliseconds
     }
     setTimeSlots(slots);
     setSelectedSlots([]);
   }, [selectedTurno]);
 
-  const handleSlotClick = (slot: Date) => {
+  const handleSlotClick = useCallback((slot: Date) => {
     setSelectedSlots(prev => {
       const isSelected = prev.some(s => s.getTime() === slot.getTime());
       if (isSelected) {
@@ -149,7 +148,7 @@ export default function DashboardPage() {
       }
       return [...prev, slot].sort((a,b) => a.getTime() - b.getTime());
     });
-  };
+  }, [minutesReserved]);
 
   const handleConfirmReservation = async () => {
     if (!user || selectedSlots.length === 0 || !selectedTurno) return;
@@ -184,7 +183,7 @@ export default function DashboardPage() {
     }
   };
 
-  const handleDeleteReservation = async (reservationId: string) => {
+  const handleDeleteReservation = useCallback(async (reservationId: string) => {
     if (!user || user.isGuest) return;
     const isConfirmed = confirm('¿Estás seguro de que quieres cancelar esta reserva?');
     if (isConfirmed) {
@@ -200,7 +199,7 @@ export default function DashboardPage() {
         toast.success('Reserva cancelada.');
       }
     }
-  };
+  }, [user, allReservas, supabase]);
   
   const handleLogout = async () => {
     if (user && !user.isGuest) await supabase.auth.signOut();
@@ -231,7 +230,7 @@ export default function DashboardPage() {
                     <p className="font-mono text-lg">{slot.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })}</p>
                     {reservedBy && <p className="text-xs truncate">{isMyReservation ? "Tu Descanso" : reservedBy.user_name}</p>}
                 </button>
-                {isMyReservation && !user?.isGuest && (
+                {isMyReservation && !user?.isGuest && reservedBy && (
                   <button onClick={() => handleDeleteReservation(reservedBy.id)} className="absolute -top-2 -right-2 bg-dark-error text-white rounded-full w-6 h-6 flex items-center justify-center text-xs font-bold transition-transform hover:scale-110 active:scale-95">
                     X
                   </button>

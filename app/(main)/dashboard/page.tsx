@@ -3,7 +3,7 @@ import { useEffect, useState, useMemo, useCallback } from 'react'
 import { createClient } from '@/lib/supabase'
 import { useRouter } from 'next/navigation'
 import toast from 'react-hot-toast'
-import { motion, AnimatePresence } from 'framer-motion'
+import { motion } from 'framer-motion'
 
 type UserProfile = { id: string; name: string; isGuest: boolean; }
 type Turno = { id: string; label: string; startHour: number; endHour: number; }
@@ -14,7 +14,6 @@ const TURNOS: Turno[] = [
   { id: 'tarde', label: '14:45 - 23:45', startHour: 14, endHour: 24 },
   { id: 'noche', label: '23:45 - 06:45', startHour: 23, endHour: 31 },
 ];
-const SLOT_DURATION = 10;
 const MAX_MINUTES = 30;
 
 const getTurnoDateRange = (turno: Turno): { start: Date; end: Date } => {
@@ -50,8 +49,6 @@ export default function DashboardPage() {
   const [allReservas, setAllReservas] = useState<Reserva[]>([])
   const [loading, setLoading] = useState(true)
   const [selectedTurno, setSelectedTurno] = useState<Turno | null>(getCurrentActiveTurno);
-  const [timeSlots, setTimeSlots] = useState<Date[]>([])
-  const [selectedSlots, setSelectedSlots] = useState<Date[]>([])
   const [currentTime, setCurrentTime] = useState(new Date())
   
   // Estados para horario personalizado
@@ -124,68 +121,9 @@ export default function DashboardPage() {
     return () => { supabase.removeChannel(channel) };
   }, [user, supabase]);
 
-  useEffect(() => {
-    if (!selectedTurno) return;
-    const { start: turnoStart } = getTurnoDateRange(selectedTurno);
-    const slots: Date[] = [];
-    let currentTime = turnoStart.getTime();
-    const endTime = currentTime + (9 * 60 * 60 * 1000); // 9 hours in milliseconds
 
-    while (currentTime < endTime) {
-      slots.push(new Date(currentTime));
-      currentTime += SLOT_DURATION * 60 * 1000; // Add SLOT_DURATION minutes in milliseconds
-    }
-    setTimeSlots(slots);
-    setSelectedSlots([]);
-  }, [selectedTurno]);
 
-  const handleSlotClick = useCallback((slot: Date) => {
-    setSelectedSlots(prev => {
-      const isSelected = prev.some(s => s.getTime() === slot.getTime());
-      if (isSelected) {
-        return prev.filter(s => s.getTime() !== slot.getTime());
-      }
-      const minutesToReserve = (prev.length + 1) * SLOT_DURATION;
-      if (minutesReserved + minutesToReserve > MAX_MINUTES) {
-        toast.error(`No puedes reservar más de ${MAX_MINUTES} minutos en total.`);
-        return prev;
-      }
-      return [...prev, slot].sort((a,b) => a.getTime() - b.getTime());
-    });
-  }, [minutesReserved]);
 
-  const handleConfirmReservation = async () => {
-    if (!user || selectedSlots.length === 0 || !selectedTurno) return;
-    const loadingToast = toast.loading('Confirmando reserva...');
-    const sortedSlots = selectedSlots.sort((a, b) => a.getTime() - b.getTime());
-    const reservationBlocks: { start: Date; end: Date; duration: number }[] = [];
-    if (sortedSlots.length > 0) {
-      let currentBlock = { start: sortedSlots[0], end: new Date(sortedSlots[0].getTime() + SLOT_DURATION * 60000), duration: SLOT_DURATION };
-      for (let i = 1; i < sortedSlots.length; i++) {
-        const previousSlotEnd = new Date(sortedSlots[i-1].getTime() + SLOT_DURATION * 60000);
-        if (sortedSlots[i].getTime() === previousSlotEnd.getTime()) {
-          currentBlock.end = new Date(sortedSlots[i].getTime() + SLOT_DURATION * 60000);
-          currentBlock.duration += SLOT_DURATION;
-        } else {
-          reservationBlocks.push(currentBlock);
-          currentBlock = { start: sortedSlots[i], end: new Date(sortedSlots[i].getTime() + SLOT_DURATION * 60000), duration: SLOT_DURATION };
-        }
-      }
-      reservationBlocks.push(currentBlock);
-    }
-    const newReservas = reservationBlocks.map(block => ({ user_id: user.isGuest ? null : user.id, user_name: user.name, shift: selectedTurno.label, start_time: block.start.toISOString(), end_time: block.end.toISOString(), duration_minutes: block.duration }));
-    const { data, error } = await supabase.from('reservas').insert(newReservas).select();
-    toast.dismiss(loadingToast);
-    if (error) {
-      toast.error('Error: ' + error.message);
-    } else {
-      toast.success('¡Descanso reservado!');
-      if (data) {
-        setAllReservas(currentReservas => [...currentReservas, ...data]);
-      }
-      setSelectedSlots([]);
-    }
-  };
 
   const handleDeleteReservation = useCallback(async (reservationId: string) => {
     if (!user || user.isGuest) return;
@@ -281,39 +219,7 @@ export default function DashboardPage() {
     router.push('/auth/login');
   };
 
-  const renderedSlots = useMemo(() => {
-    return (
-      <AnimatePresence>
-        {timeSlots.map(slot => {
-            const slotTime = slot.getTime();
-            const reservedBy = filteredReservas.find(r => slotTime >= new Date(r.start_time).getTime() && slotTime < new Date(r.end_time).getTime());
-            const isSelected = selectedSlots.some(s => s.getTime() === slotTime);
-            const isMyReservation = reservedBy ? (user?.isGuest ? reservedBy.user_name === user.name : reservedBy.user_id === user?.id) : false;
-            const isDisabled = (!!reservedBy && !isMyReservation) || (!isSelected && !canReserveMore);
 
-            let slotClass = "bg-bg-secondary border-border-default/50 hover:border-primary";
-            if (isMyReservation) slotClass = "bg-primary/80 border-primary text-on-primary font-semibold";
-            else if (reservedBy) slotClass = "bg-border-default text-text-secondary cursor-not-allowed";
-            else if (isSelected) slotClass = "bg-accent border-accent text-on-primary ring-2 ring-accent font-semibold";
-            else if (!canReserveMore) slotClass = "bg-bg-secondary border-border-default/50 opacity-50 cursor-not-allowed";
-
-            return (
-              <motion.div key={slotTime} layout initial={{ opacity: 0, scale: 0.8 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.8 }} transition={{ type: "spring", stiffness: 300, damping: 25 }} className="relative">
-                <button disabled={isDisabled} onClick={() => handleSlotClick(slot)} className={`w-full h-full p-2 rounded-lg text-center border transition-all duration-150 ${slotClass}`}>
-                    <p className="font-mono text-lg">{slot.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })}</p>
-                    {reservedBy && <p className="text-xs truncate">{isMyReservation ? "Tu Descanso" : reservedBy.user_name}</p>}
-                </button>
-                {isMyReservation && !user?.isGuest && reservedBy && (
-                  <button onClick={() => handleDeleteReservation(reservedBy.id)} className="absolute -top-2 -right-2 bg-error text-white rounded-full w-6 h-6 flex items-center justify-center text-xs font-bold transition-transform hover:scale-110 active:scale-95">
-                    X
-                  </button>
-                )}
-              </motion.div>
-            );
-        })}
-      </AnimatePresence>
-    );
-  }, [timeSlots, filteredReservas, selectedSlots, user, canReserveMore, handleSlotClick, handleDeleteReservation]);
 
   if (!user) return <div className="flex h-screen items-center justify-center bg-bg-primary text-text-primary font-sora text-lg">Cargando...</div>;
 
@@ -437,29 +343,122 @@ export default function DashboardPage() {
           </section>
         )}
 
+        {/* Timeline de Reservas */}
         {selectedTurno && (
           <section className="p-6 bg-bg-secondary rounded-xl shadow-lg border border-border-default">
-            <div className="flex flex-wrap justify-between items-center mb-6 gap-4">
-              <h2 className="text-xl font-bold">3. O usa bloques de 10 min (método clásico)</h2>
-              {selectedSlots.length > 0 && (
-                <div className="flex items-center gap-4">
-                  <span className="text-sm font-semibold">{selectedSlots.length * SLOT_DURATION} mins a reservar</span>
-                  <button onClick={handleConfirmReservation} className="px-6 py-2 bg-success text-white font-bold rounded-lg shadow-lg hover:opacity-90 transition-opacity">
-                    Confirmar
-                  </button>
+            <div className="flex justify-between items-center mb-6">
+              <h2 className="text-xl font-bold">3. Timeline de Descansos - {selectedTurno.label}</h2>
+              {!canReserveMore && (
+                <div className="text-center py-2 px-4 bg-success/20 rounded-lg border border-success/50">
+                  <p className="text-sm font-semibold text-success">✅ Límite alcanzado ({minutesReserved}/{MAX_MINUTES} min)</p>
                 </div>
               )}
             </div>
-            {!canReserveMore && minutesReserved > 0 && (
-              <div className="text-center py-4 mb-4 bg-success/20 rounded-lg border border-success/50">
-                <p className="font-semibold text-success">¡Ya has reservado todo tu tiempo de descanso!</p>
+
+            {loading ? (
+              <div className="text-center py-8">
+                <div className="text-text-secondary">🔄 Cargando reservas...</div>
+              </div>
+            ) : filteredReservas.length === 0 ? (
+              <div className="text-center py-12 bg-bg-primary rounded-xl border border-border-subtle">
+                <div className="text-6xl mb-4">🕐</div>
+                <h3 className="text-xl font-semibold text-text-primary mb-2">No hay reservas aún</h3>
+                <p className="text-text-secondary">¡Sé el primero en reservar tu descanso para este turno!</p>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {/* Línea de tiempo visual */}
+                <div className="relative">
+                  {/* Línea base del timeline */}
+                  <div className="absolute left-8 top-0 bottom-0 w-0.5 bg-border-default"></div>
+                  
+                  {filteredReservas
+                    .sort((a, b) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime())
+                    .map((reserva, index) => {
+                      const startTime = new Date(reserva.start_time);
+                      const endTime = new Date(reserva.end_time);
+                      const isMyReservation = user.isGuest ? reserva.user_name === user.name : reserva.user_id === user.id;
+                      
+                      return (
+                        <motion.div
+                          key={reserva.id}
+                          initial={{ opacity: 0, x: -20 }}
+                          animate={{ opacity: 1, x: 0 }}
+                          transition={{ delay: index * 0.1 }}
+                          className="relative flex items-center gap-4 pb-6"
+                        >
+                          {/* Punto del timeline */}
+                          <div className={`flex-shrink-0 w-4 h-4 rounded-full border-2 ${
+                            isMyReservation 
+                              ? 'bg-primary border-primary' 
+                              : 'bg-bg-secondary border-border-default'
+                          }`}></div>
+                          
+                          {/* Tarjeta de reserva */}
+                          <div className={`flex-1 p-4 rounded-lg border transition-all hover:shadow-md ${
+                            isMyReservation
+                              ? 'bg-primary/10 border-primary/30'
+                              : 'bg-bg-primary border-border-subtle'
+                          }`}>
+                            <div className="flex justify-between items-start">
+                              <div>
+                                <div className="flex items-center gap-3 mb-2">
+                                  <span className="text-lg font-bold font-mono">
+                                    {startTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })} - {endTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })}
+                                  </span>
+                                  <span className={`px-2 py-1 text-xs font-medium rounded-full ${
+                                    isMyReservation
+                                      ? 'bg-primary text-on-primary'
+                                      : 'bg-text-secondary/10 text-text-secondary'
+                                  }`}>
+                                    {reserva.duration_minutes} min
+                                  </span>
+                                </div>
+                                
+                                <p className={`font-medium ${isMyReservation ? 'text-primary' : 'text-text-primary'}`}>
+                                  {isMyReservation ? '👤 Tu descanso' : `👥 ${reserva.user_name}`}
+                                </p>
+                              </div>
+                              
+                              {/* Botón de eliminar solo para mis reservas */}
+                              {isMyReservation && !user.isGuest && (
+                                <button
+                                  onClick={() => handleDeleteReservation(reserva.id)}
+                                  className="p-2 text-error hover:bg-error/10 rounded-lg transition-colors"
+                                  title="Cancelar reserva"
+                                >
+                                  🗑️
+                                </button>
+                              )}
+                            </div>
+                            
+                            {/* Indicador visual de tiempo transcurrido */}
+                            <div className="mt-3 flex items-center gap-2 text-xs text-text-secondary">
+                              <span>⏱️</span>
+                              <span>Inicio: {startTime.toLocaleDateString()}</span>
+                            </div>
+                          </div>
+                        </motion.div>
+                      )
+                    })}
+                </div>
+
+                {/* Resumen del día */}
+                <div className="mt-6 p-4 bg-bg-primary rounded-lg border border-border-subtle">
+                  <div className="flex justify-between items-center text-sm">
+                    <span className="text-text-secondary">📊 Resumen del turno:</span>
+                    <div className="flex gap-6">
+                      <span className="text-text-primary">
+                        <strong>{filteredReservas.length}</strong> reservas totales
+                      </span>
+                      <span className="text-primary">
+                        <strong>{filteredReservas.reduce((acc, r) => acc + r.duration_minutes, 0)}</strong> min ocupados
+                      </span>
+                    </div>
+                  </div>
+                </div>
               </div>
             )}
-            {loading ? <p>Cargando horarios...</p> : 
-              <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-3">
-                {renderedSlots}
-              </div>
-            }
           </section>
         )}
       </main>

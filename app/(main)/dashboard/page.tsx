@@ -19,7 +19,7 @@ const MAX_MINUTES = 30;
 
 const getTurnoDateRange = (turno: Turno): { start: Date; end: Date } => {
   const now = new Date();
-  let turnoStart = new Date(now.getFullYear(), now.getMonth(), now.getDate(), turno.startHour, 45, 0, 0);
+  const turnoStart = new Date(now.getFullYear(), now.getMonth(), now.getDate(), turno.startHour, 45, 0, 0);
   
   if (turno.id === 'noche') {
     if (now.getHours() < 7) {
@@ -28,7 +28,7 @@ const getTurnoDateRange = (turno: Turno): { start: Date; end: Date } => {
   }
   
   const endHour = turno.endHour >= 24 ? turno.endHour - 24 : turno.endHour;
-  let turnoEnd = new Date(turnoStart.getFullYear(), turnoStart.getMonth(), turnoStart.getDate(), endHour, 45, 0, 0);
+  const turnoEnd = new Date(turnoStart.getFullYear(), turnoStart.getMonth(), turnoStart.getDate(), endHour, 45, 0, 0);
   if(turno.endHour >= 24) turnoEnd.setDate(turnoEnd.getDate() + 1);
 
   return { start: turnoStart, end: turnoEnd };
@@ -124,7 +124,7 @@ export default function DashboardPage() {
     if (!selectedTurno) return;
     const { start: turnoStart } = getTurnoDateRange(selectedTurno);
     const slots: Date[] = [];
-    let start = turnoStart;
+    const start = new Date(turnoStart);
     const end = new Date(start);
     end.setHours(end.getHours() + 9);
 
@@ -241,7 +241,7 @@ export default function DashboardPage() {
         })}
       </AnimatePresence>
     );
-  }, [timeSlots, filteredReservas, selectedSlots, user, canReserveMore]);
+  }, [timeSlots, filteredReservas, selectedSlots, user, canReserveMore, handleSlotClick, handleDeleteReservation]);
 
   if (!user) return <div className="flex h-screen items-center justify-center bg-dark-background-primary text-dark-text-primary font-sora text-lg">Cargando...</div>;
   

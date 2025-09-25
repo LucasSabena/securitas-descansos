@@ -5,7 +5,6 @@ import { useRouter } from 'next/navigation'
 import toast from 'react-hot-toast'
 
 type UserProfile = { id: string; name: string; isGuest: boolean; }
-type Reserva = { start_time: string; duration_minutes: number; }
 type Stats = {
   totalReservas: number;
   totalMinutos: number;

@@ -52,7 +52,7 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
     checkAuth();
 
     // También escuchar cambios de autenticación para actualizaciones en tiempo real
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event) => {
       // Solo reaccionar a eventos de sign in/out, no a cada cambio
       if (event === 'SIGNED_IN' || event === 'SIGNED_OUT') {
         checkAuth();

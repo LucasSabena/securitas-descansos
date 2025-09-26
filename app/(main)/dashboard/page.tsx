@@ -21,35 +21,69 @@ type Turno = { id: string; label: string; startHour: number; endHour: number; }
 type Reserva = { id: string; start_time: string; end_time: string; user_id: string; user_name: string; duration_minutes: number; }
 
 const TURNOS: Turno[] = [
-  { id: 'manana', label: '06:45 - 14:45', startHour: 6, endHour: 15 },
-  { id: 'tarde', label: '14:45 - 23:45', startHour: 14, endHour: 24 },
-  { id: 'noche', label: '23:45 - 06:45', startHour: 23, endHour: 31 },
+  { id: 'manana', label: '06:45 - 14:45', startHour: 6, endHour: 14 },
+  { id: 'tarde', label: '14:45 - 23:45', startHour: 14, endHour: 23 },
+  { id: 'noche', label: '23:45 - 06:45', startHour: 23, endHour: 6 },
 ];
 const MAX_MINUTES = 30;
 
-const getTurnoDateRange = (turno: Turno): { start: Date; end: Date } => {
+// Función para obtener la hora actual en Argentina (GMT-3)
+const getArgentinaTime = (): Date => {
   const now = new Date();
-  let turnoStart = new Date(now.getFullYear(), now.getMonth(), now.getDate(), turno.startHour, 45, 0, 0);
-  
-  if (turno.id === 'noche' && now.getHours() < 7) {
-    turnoStart = new Date(turnoStart.getTime() - 24 * 60 * 60 * 1000); // Subtract 1 day
-  }
-  
-  const endHour = turno.endHour >= 24 ? turno.endHour - 24 : turno.endHour;
-  let turnoEnd = new Date(turnoStart.getFullYear(), turnoStart.getMonth(), turnoStart.getDate(), endHour, 45, 0, 0);
-  if(turno.endHour >= 24) {
-    turnoEnd = new Date(turnoEnd.getTime() + 24 * 60 * 60 * 1000); // Add 1 day
-  }
+  // Convertir a Argentina (GMT-3)
+  const utc = now.getTime() + (now.getTimezoneOffset() * 60000);
+  const argTime = new Date(utc + (-3 * 3600000));
+  return argTime;
+};
 
-  return { start: turnoStart, end: turnoEnd };
-}
+const getTurnoDateRange = (turno: Turno): { start: Date; end: Date } => {
+  const now = getArgentinaTime();
+  
+  if (turno.id === 'noche') {
+    // Turno noche: 23:45 de hoy → 06:45 de mañana
+    let turnoStart: Date;
+    let turnoEnd: Date;
+    
+    if (now.getHours() >= 23 && now.getMinutes() >= 45) {
+      // Es después de las 23:45 de hoy → turno actual
+      turnoStart = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 45, 0, 0);
+      turnoEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, 6, 45, 0, 0);
+    } else if (now.getHours() < 7) {
+      // Es antes de las 06:45 → turno que empezó ayer
+      turnoStart = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1, 23, 45, 0, 0);
+      turnoEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 6, 45, 0, 0);
+    } else {
+      // Es durante el día → próximo turno noche
+      turnoStart = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 45, 0, 0);
+      turnoEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, 6, 45, 0, 0);
+    }
+    
+    return { start: turnoStart, end: turnoEnd };
+  } else {
+    // Turnos mañana y tarde (mismo día)
+    const turnoStart = new Date(now.getFullYear(), now.getMonth(), now.getDate(), turno.startHour, 45, 0, 0);
+    const turnoEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate(), turno.endHour, 45, 0, 0);
+    return { start: turnoStart, end: turnoEnd };
+  }
+};
 
 const getCurrentActiveTurno = () => {
-  const currentHour = new Date().getHours();
-  if (currentHour >= 6 && currentHour < 14) return TURNOS[0];
-  if (currentHour >= 14 && currentHour < 23) return TURNOS[1];
-  if (currentHour >= 23 || currentHour < 6) return TURNOS[2];
-  return TURNOS[1];
+  const now = getArgentinaTime();
+  const hour = now.getHours();
+  const minute = now.getMinutes();
+  const timeInMinutes = hour * 60 + minute;
+  
+  // Convertir horarios a minutos para comparación precisa
+  const mananaStart = 6 * 60 + 45;   // 06:45 = 405 min
+  const tardeStart = 14 * 60 + 45;   // 14:45 = 885 min  
+  const nocheStart = 23 * 60 + 45;   // 23:45 = 1425 min
+  const nocheEnd = 6 * 60 + 45;      // 06:45 = 405 min
+  
+  if (timeInMinutes >= mananaStart && timeInMinutes < tardeStart) return TURNOS[0]; // mañana
+  if (timeInMinutes >= tardeStart && timeInMinutes < nocheStart) return TURNOS[1];  // tarde
+  if (timeInMinutes >= nocheStart || timeInMinutes < nocheEnd) return TURNOS[2];    // noche
+  
+  return TURNOS[1]; // fallback
 };
 
 // Función para agrupar reservas por horas
@@ -79,7 +113,7 @@ export default function DashboardPage() {
   const [allReservas, setAllReservas] = useState<Reserva[]>([])
   const [loading, setLoading] = useState(true)
   const [selectedTurno, setSelectedTurno] = useState<Turno | null>(getCurrentActiveTurno);
-  const [currentTime, setCurrentTime] = useState(new Date())
+  const [currentTime, setCurrentTime] = useState(getArgentinaTime())
   
   // Estados para horario personalizado
   const [customTime, setCustomTime] = useState('')
@@ -98,17 +132,13 @@ export default function DashboardPage() {
   }, [permission])
 
   useEffect(() => {
-    const timer = setInterval(() => setCurrentTime(new Date()), 60000);
+    const timer = setInterval(() => setCurrentTime(getArgentinaTime()), 60000);
     return () => clearInterval(timer);
   }, []);
 
   const activeTurno = useMemo(() => {
-    const currentHour = currentTime.getHours();
-    if (currentHour >= 6 && currentHour < 14) return TURNOS[0];
-    if (currentHour >= 14 && currentHour < 23) return TURNOS[1];
-    if (currentHour >= 23 || currentHour < 6) return TURNOS[2];
-    return TURNOS[1];
-  }, [currentTime]);
+    return getCurrentActiveTurno();
+  }, []);
 
   const filteredReservas = useMemo(() => {
     if (!selectedTurno) return [];
@@ -122,7 +152,7 @@ export default function DashboardPage() {
   const minutesReserved = useMemo(() => {
     if (!user || !selectedTurno) return 0;
     const { start, end } = getTurnoDateRange(selectedTurno);
-    const today = new Date();
+    const today = getArgentinaTime();
     const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate());
     const todayEnd = new Date(todayStart.getTime() + 24 * 60 * 60 * 1000);
     

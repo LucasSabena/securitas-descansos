@@ -89,7 +89,7 @@ export function useNotifications(): NotificationHook {
         // Usar setTimeout directo (más confiable para pruebas)
         setTimeout(() => {
           if (Notification.permission === 'granted') {
-            new Notification('🕒 Descanso próximo', {
+            new Notification('Descanso próximo', {
               body: `Tu descanso "${title}" empezará en 5 minutos`,
               icon: '/favicon.ico',
               tag: `reminder-${reservaId}`,
@@ -103,7 +103,7 @@ export function useNotifications(): NotificationHook {
       } else if (delay <= 0) {
         console.log('⏰ Descanso muy pronto, mostrando notificación inmediata')
         if (Notification.permission === 'granted') {
-          new Notification('🚨 Descanso ahora', {
+          new Notification('Descanso ahora', {
             body: `Tu descanso "${title}" está empezando`,
             icon: '/favicon.ico',
             requireInteraction: true

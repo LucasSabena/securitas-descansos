@@ -6,7 +6,9 @@ import toast from 'react-hot-toast'
 import { 
   CalendarIcon, 
   ClockIcon, 
-  ReloadIcon
+  ReloadIcon,
+  BarChartIcon,
+  ActivityLogIcon
 } from '@radix-ui/react-icons'
 
 type UserProfile = { id: string; name: string; isGuest: boolean; }
@@ -256,26 +258,28 @@ export default function ProfilePage() {
           <div className="flex bg-dark-background-secondary rounded-lg p-1 border border-dark-border-default">
             <button
               onClick={() => setActiveTab('stats')}
-              className={`px-6 py-2 rounded-md font-medium transition-colors ${
+              className={`px-6 py-2 rounded-md font-medium transition-colors flex items-center gap-2 ${
                 activeTab === 'stats' 
                   ? 'bg-dark-primary text-white' 
                   : 'text-dark-text-secondary hover:text-dark-text-primary'
               }`}
             >
-              📊 Estadísticas
+              <BarChartIcon className="w-4 h-4" />
+              Estadísticas
             </button>
             <button
               onClick={() => {
                 setActiveTab('history');
                 if (historial.length === 0) fetchHistorial();
               }}
-              className={`px-6 py-2 rounded-md font-medium transition-colors ${
+              className={`px-6 py-2 rounded-md font-medium transition-colors flex items-center gap-2 ${
                 activeTab === 'history' 
                   ? 'bg-dark-primary text-white' 
                   : 'text-dark-text-secondary hover:text-dark-text-primary'
               }`}
             >
-              📅 Historial
+              <ActivityLogIcon className="w-4 h-4" />
+              Historial
             </button>
           </div>
         </div>

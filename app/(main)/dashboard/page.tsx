@@ -142,7 +142,17 @@ export default function DashboardPage() {
 
   const canReserveMore = minutesReserved < MAX_MINUTES;
 
-
+  // Ajustar customDuration cuando cambien los minutos disponibles
+  useEffect(() => {
+    const availableMinutes = MAX_MINUTES - minutesReserved;
+    const availableOptions = [5, 10, 15, 20, 25, 30].filter(min => min <= availableMinutes);
+    
+    // Si customDuration actual no está disponible, usar la primera opción válida
+    if (availableOptions.length > 0 && !availableOptions.includes(customDuration)) {
+      console.log(`🔧 Ajustando customDuration de ${customDuration} a ${availableOptions[0]} (disponibles: ${availableMinutes})`);
+      setCustomDuration(availableOptions[0]);
+    }
+  }, [minutesReserved, customDuration]);
 
   useEffect(() => {
     const fetchUserProfile = async () => {

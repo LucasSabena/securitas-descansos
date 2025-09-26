@@ -15,7 +15,7 @@ interface NotificationHook {
 export function useNotifications(): NotificationHook {
   const [permission, setPermission] = useState<NotificationPermission>('default')
   const [isSupported, setIsSupported] = useState(false)
-  const [serviceWorker, setServiceWorker] = useState<ServiceWorkerRegistration | null>(null)
+  const [, setServiceWorker] = useState<ServiceWorkerRegistration | null>(null)
 
   useEffect(() => {
     // Verificar soporte para notificaciones
@@ -65,8 +65,8 @@ export function useNotifications(): NotificationHook {
   }
 
   const scheduleNotification = (reservaId: string, startTime: string, title: string) => {
-    if (permission !== 'granted' || !serviceWorker) {
-      console.log('No se puede programar notificación:', { permission, serviceWorker })
+    if (permission !== 'granted') {
+      console.log('⚠️ Sin permisos de notificación')
       return
     }
 
@@ -78,27 +78,42 @@ export function useNotifications(): NotificationHook {
       const notificationTime = new Date(startDate.getTime() - 5 * 60 * 1000)
       const delay = notificationTime.getTime() - now.getTime()
       
-      if (delay > 0) {
-        // Enviar mensaje al service worker para programar la notificación
-        navigator.serviceWorker.ready.then((registration) => {
-          if (registration.active) {
-            registration.active.postMessage({
-              type: 'SCHEDULE_NOTIFICATION',
-              delay,
-              title: 'Descanso próximo 🕒',
+      console.log('🔔 Programando notificación:', {
+        reservaId,
+        startTime,
+        notificationTime: notificationTime.toLocaleString(),
+        delay: Math.round(delay / 1000 / 60) + ' minutos'
+      })
+      
+      if (delay > 0 && delay < 24 * 60 * 60 * 1000) { // Máximo 24 horas
+        // Usar setTimeout directo (más confiable para pruebas)
+        setTimeout(() => {
+          if (Notification.permission === 'granted') {
+            new Notification('🕒 Descanso próximo', {
               body: `Tu descanso "${title}" empezará en 5 minutos`,
-              reservaId
+              icon: '/favicon.ico',
+              tag: `reminder-${reservaId}`,
+              requireInteraction: true
             })
           }
-        })
+        }, delay)
         
-        console.log(`Notificación programada para ${notificationTime.toLocaleTimeString()}`)
-        toast.success('Notificación programada para 5 min antes del descanso')
+        console.log(`✅ Notificación programada para ${notificationTime.toLocaleTimeString()}`)
+        toast.success(`Recordatorio programado para ${notificationTime.toLocaleTimeString()}`)
+      } else if (delay <= 0) {
+        console.log('⏰ Descanso muy pronto, mostrando notificación inmediata')
+        if (Notification.permission === 'granted') {
+          new Notification('🚨 Descanso ahora', {
+            body: `Tu descanso "${title}" está empezando`,
+            icon: '/favicon.ico',
+            requireInteraction: true
+          })
+        }
       } else {
-        console.log('El descanso es muy pronto para programar notificación')
+        console.log('⏳ Descanso muy lejano (>24h)')
       }
     } catch (error) {
-      console.error('Error programando notificación:', error)
+      console.error('❌ Error programando notificación:', error)
       toast.error('Error al programar notificación')
     }
   }

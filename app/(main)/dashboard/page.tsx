@@ -113,7 +113,7 @@ export default function DashboardPage() {
   const [allReservas, setAllReservas] = useState<Reserva[]>([])
   const [loading, setLoading] = useState(true)
   const [selectedTurno, setSelectedTurno] = useState<Turno | null>(getCurrentActiveTurno);
-  const [currentTime, setCurrentTime] = useState(getArgentinaTime())
+  const [, setCurrentTime] = useState(getArgentinaTime())
   
   // Estados para horario personalizado
   const [customTime, setCustomTime] = useState('')
@@ -263,6 +263,17 @@ export default function DashboardPage() {
     
     if (!isMyReservation) {
       toast.error('No puedes borrar reservas de otros usuarios');
+      return;
+    }
+
+    // 🛡️ Protección anti-borrado: No se puede borrar si faltan 10 min o menos
+    const now = getArgentinaTime();
+    const startTime = new Date(reservaToDelete.start_time);
+    const timeUntilStart = startTime.getTime() - now.getTime();
+    const minutesUntilStart = Math.round(timeUntilStart / (1000 * 60));
+
+    if (timeUntilStart <= 10 * 60 * 1000 && timeUntilStart > -30 * 60 * 1000) { // 10 min antes hasta 30 min después
+      toast.error(`🚫 No puedes borrar este descanso. ${minutesUntilStart <= 0 ? 'Ya empezó' : `Faltan solo ${minutesUntilStart} minutos`}`);
       return;
     }
 
@@ -766,15 +777,34 @@ export default function DashboardPage() {
                               </div>
                               
                               {/* Botón de eliminar solo para mis reservas */}
-                              {isMyReservation && (
-                                <button
-                                  onClick={() => handleDeleteReservation(reserva.id)}
-                                  className="p-2 text-error hover:bg-error/10 rounded-lg transition-colors flex items-center gap-1"
-                                  title="Borrar este descanso"
-                                >
-                                  <TrashIcon className="w-4 h-4" />
-                                </button>
-                              )}
+                              {isMyReservation && (() => {
+                                const now = getArgentinaTime();
+                                const startTime = new Date(reserva.start_time);
+                                const timeUntilStart = startTime.getTime() - now.getTime();
+                                const minutesUntilStart = Math.round(timeUntilStart / (1000 * 60));
+                                const canDelete = !(timeUntilStart <= 10 * 60 * 1000 && timeUntilStart > -30 * 60 * 1000);
+
+                                if (!canDelete) {
+                                  return (
+                                    <div 
+                                      className="p-2 text-text-secondary bg-bg-secondary rounded-lg flex items-center gap-1 cursor-not-allowed"
+                                      title={`🛡️ Protegido: ${minutesUntilStart <= 0 ? 'Ya empezó' : `Faltan ${minutesUntilStart} min`}`}
+                                    >
+                                      🛡️
+                                    </div>
+                                  );
+                                }
+
+                                return (
+                                  <button
+                                    onClick={() => handleDeleteReservation(reserva.id)}
+                                    className="p-2 text-error hover:bg-error/10 rounded-lg transition-colors flex items-center gap-1"
+                                    title="Borrar este descanso"
+                                  >
+                                    <TrashIcon className="w-4 h-4" />
+                                  </button>
+                                );
+                              })()}
                             </div>
                             
                             {/* Indicador visual de tiempo transcurrido */}

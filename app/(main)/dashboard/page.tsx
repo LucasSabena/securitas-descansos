@@ -13,7 +13,8 @@ import {
   TargetIcon,
   PlusIcon,
   TrashIcon,
-  BellIcon
+  BellIcon,
+  LockClosedIcon
 } from '@radix-ui/react-icons'
 
 type UserProfile = { id: string; name: string; isGuest: boolean; }
@@ -266,14 +267,18 @@ export default function DashboardPage() {
       return;
     }
 
-    // 🛡️ Protección anti-borrado: No se puede borrar si faltan 10 min o menos
+    // Protección anti-borrado: No se puede borrar si faltan 10 min o menos, y NUNCA después de empezar
     const now = getArgentinaTime();
     const startTime = new Date(reservaToDelete.start_time);
     const timeUntilStart = startTime.getTime() - now.getTime();
     const minutesUntilStart = Math.round(timeUntilStart / (1000 * 60));
 
-    if (timeUntilStart <= 10 * 60 * 1000 && timeUntilStart > -30 * 60 * 1000) { // 10 min antes hasta 30 min después
-      toast.error(`🚫 No puedes borrar este descanso. ${minutesUntilStart <= 0 ? 'Ya empezó' : `Faltan solo ${minutesUntilStart} minutos`}`);
+    if (timeUntilStart <= 10 * 60 * 1000) { // 10 min antes o ya empezó
+      if (minutesUntilStart <= 0) {
+        toast.error('No puedes borrar este descanso porque ya empezó. Esta política previene abusos del sistema.');
+      } else {
+        toast.error(`No puedes borrar este descanso. Faltan solo ${minutesUntilStart} minutos para que empiece.`);
+      }
       return;
     }
 
@@ -782,15 +787,20 @@ export default function DashboardPage() {
                                 const startTime = new Date(reserva.start_time);
                                 const timeUntilStart = startTime.getTime() - now.getTime();
                                 const minutesUntilStart = Math.round(timeUntilStart / (1000 * 60));
-                                const canDelete = !(timeUntilStart <= 10 * 60 * 1000 && timeUntilStart > -30 * 60 * 1000);
+                                const canDelete = timeUntilStart > 10 * 60 * 1000; // Solo si faltan más de 10 min
 
                                 if (!canDelete) {
+                                  const isStarted = minutesUntilStart <= 0;
                                   return (
                                     <div 
                                       className="p-2 text-text-secondary bg-bg-secondary rounded-lg flex items-center gap-1 cursor-not-allowed"
-                                      title={`🛡️ Protegido: ${minutesUntilStart <= 0 ? 'Ya empezó' : `Faltan ${minutesUntilStart} min`}`}
+                                      title={isStarted ? 'Protegido: Ya empezó y no se puede borrar nunca' : `Protegido: Faltan ${minutesUntilStart} min`}
                                     >
-                                      🛡️
+                                      {isStarted ? (
+                                        <LockClosedIcon className="w-4 h-4" />
+                                      ) : (
+                                        <ClockIcon className="w-4 h-4" />
+                                      )}
                                     </div>
                                   );
                                 }

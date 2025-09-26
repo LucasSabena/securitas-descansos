@@ -1,6 +1,28 @@
 {
   "project": "Sistema de Reservas de Descansos - Securitas",
   "version": "1.0.0",
+  "iconography": {
+    "library": "@radix-ui/react-icons",
+    "guidelines": "Usar exclusivamente iconos de Radix UI para consistencia visual",
+    "installation": "npm install @radix-ui/react-icons",
+    "usage": "import { IconName } from '@radix-ui/react-icons'",
+    "forbidden": "No usar emojis, Font Awesome, u otras librerías de iconos"
+  },
+  "business_rules": {
+    "reservations": {
+      "deletion_policy": {
+        "description": "Política de eliminación de reservas para prevenir abuso del sistema",
+        "rules": [
+          "Se puede borrar hasta 10 minutos antes del inicio",
+          "Una vez iniciada la reserva, NO se puede borrar nunca",
+          "Esto previene que usuarios cancelen y vuelvan a reservar el mismo día",
+          "Protege contra sabotaje entre usuarios"
+        ],
+        "implementation": "Validar tiempo restante usando getArgentinaTime()",
+        "time_zones": "Siempre usar GMT-3 (Argentina) para consistencia"
+      }
+    }
+  },
   "typography": {
     "fontFamily": {
       "name": "Sora",

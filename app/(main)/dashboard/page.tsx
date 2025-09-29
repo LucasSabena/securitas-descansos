@@ -30,6 +30,12 @@ const MAX_MINUTES = 30;
 
 // Función para obtener la hora actual en Argentina (GMT-3)
 const getArgentinaTime = (): Date => {
+  // Usar solo en el cliente para evitar problemas de hidratación
+  if (typeof window === 'undefined') {
+    // En el servidor, usar UTC como fallback
+    return new Date();
+  }
+  
   const now = new Date();
   // Convertir a Argentina (GMT-3)
   const utc = now.getTime() + (now.getTimezoneOffset() * 60000);
@@ -113,8 +119,9 @@ export default function DashboardPage() {
   const [user, setUser] = useState<UserProfile | null>(null)
   const [allReservas, setAllReservas] = useState<Reserva[]>([])
   const [loading, setLoading] = useState(true)
-  const [selectedTurno, setSelectedTurno] = useState<Turno | null>(getCurrentActiveTurno);
-  const [, setCurrentTime] = useState(getArgentinaTime())
+  const [selectedTurno, setSelectedTurno] = useState<Turno | null>(null);
+  const [, setCurrentTime] = useState(new Date())
+  const [isClient, setIsClient] = useState(false)
   
   // Estados para horario personalizado
   const [customTime, setCustomTime] = useState('')
@@ -127,6 +134,13 @@ export default function DashboardPage() {
   // Hook de notificaciones
   const { permission, isSupported, requestPermission, scheduleNotification } = useNotifications()
   const [notificationsEnabled, setNotificationsEnabled] = useState(false)
+
+  // Hidratación segura
+  useEffect(() => {
+    setIsClient(true)
+    setSelectedTurno(getCurrentActiveTurno())
+    setCurrentTime(getArgentinaTime())
+  }, [])
 
   useEffect(() => {
     setNotificationsEnabled(permission === 'granted')
@@ -518,7 +532,17 @@ export default function DashboardPage() {
 
 
 
-  if (!user) return <div className="flex h-screen items-center justify-center bg-bg-primary text-text-primary font-sora text-lg">Cargando...</div>;
+  // Mostrar loading hasta que esté hidratado y tenga usuario
+  if (!user || !isClient) {
+    return (
+      <div className="flex h-screen items-center justify-center bg-bg-primary text-text-primary font-sora">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4"></div>
+          <p className="text-lg">Cargando dashboard...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="bg-bg-primary min-h-screen font-sora">

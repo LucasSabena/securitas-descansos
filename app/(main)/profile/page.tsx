@@ -48,13 +48,20 @@ export default function ProfilePage() {
     const fetchProfileAndStats = async () => {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) {
-        const guestData = localStorage.getItem('guestUser');
-        if (guestData) {
-          setUser(JSON.parse(guestData));
-          setLoading(false);
-        } else {
-          router.push('/auth/login');
+        // Acceso seguro a localStorage
+        try {
+          if (typeof window !== 'undefined' && window.localStorage) {
+            const guestData = window.localStorage.getItem('guestUser');
+            if (guestData) {
+              setUser(JSON.parse(guestData));
+              setLoading(false);
+              return;
+            }
+          }
+        } catch (error) {
+          console.warn('Error accediendo a localStorage:', error)
         }
+        router.push('/auth/login');
         return;
       }
 
@@ -184,7 +191,16 @@ export default function ProfilePage() {
   
   const handleLogout = async () => {
     if (user && !user.isGuest) await supabase.auth.signOut();
-    localStorage.removeItem('guestUser');
+    
+    // Eliminar localStorage de forma segura
+    try {
+      if (typeof window !== 'undefined' && window.localStorage) {
+        window.localStorage.removeItem('guestUser');
+      }
+    } catch (error) {
+      console.warn('Error eliminando datos de localStorage:', error)
+    }
+    
     toast.success('¡Hasta luego!');
     router.push('/auth/login');
   };

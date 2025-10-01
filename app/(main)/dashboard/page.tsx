@@ -29,29 +29,31 @@ const TURNOS: Turno[] = [
 const MAX_MINUTES = 30;
 
 // Función para obtener la hora actual en Argentina (GMT-3)
+// Implementación compatible con iOS Safari
 const getArgentinaTime = (): Date => {
   // Usar solo en el cliente para evitar problemas de hidratación
   if (typeof window === 'undefined') {
     return new Date(); // En el servidor, usar UTC como fallback
   }
   
-  // Método más robusto compatible con iOS/Safari
   try {
-    // Crear fecha en timezone de Argentina usando Intl
-    const argentinaTimeString = new Date().toLocaleString('en-US', {
-      timeZone: 'America/Argentina/Buenos_Aires',
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-      hour: '2-digit',
-      minute: '2-digit',
-      second: '2-digit',
-      hour12: false
-    });
-    return new Date(argentinaTimeString);
+    // Método robusto que funciona en todos los navegadores incluyendo iOS Safari
+    const now = new Date();
+    
+    // Obtener el offset de Argentina (GMT-3 = -180 minutos)
+    const argentinaOffset = -180; // -3 horas en minutos
+    
+    // Obtener el offset local del navegador
+    const localOffset = now.getTimezoneOffset();
+    
+    // Calcular la diferencia
+    const diff = localOffset - argentinaOffset;
+    
+    // Aplicar la diferencia en milisegundos
+    return new Date(now.getTime() + diff * 60 * 1000);
   } catch (error) {
-    // Fallback si Intl falla
     console.error('Error getting Argentina time:', error);
+    // Fallback simple si todo falla
     const now = new Date();
     const utc = now.getTime() + (now.getTimezoneOffset() * 60000);
     return new Date(utc + (-3 * 3600000));
@@ -97,15 +99,33 @@ const getCurrentActiveTurno = () => {
   
   // Convertir horarios a minutos para comparación precisa
   const mananaStart = 6 * 60 + 45;   // 06:45 = 405 min
+  const mananaEnd = 14 * 60 + 45;    // 14:45 = 885 min
   const tardeStart = 14 * 60 + 45;   // 14:45 = 885 min  
+  const tardeEnd = 23 * 60 + 45;     // 23:45 = 1425 min
   const nocheStart = 23 * 60 + 45;   // 23:45 = 1425 min
-  const nocheEnd = 6 * 60 + 45;      // 06:45 = 405 min
+  const nocheEnd = 6 * 60 + 45;      // 06:45 = 405 min (del día siguiente)
   
-  if (timeInMinutes >= mananaStart && timeInMinutes < tardeStart) return TURNOS[0]; // mañana
-  if (timeInMinutes >= tardeStart && timeInMinutes < nocheStart) return TURNOS[1];  // tarde
-  if (timeInMinutes >= nocheStart || timeInMinutes < nocheEnd) return TURNOS[2];    // noche
+  // Turno noche: desde 23:45 hasta 06:44 del día siguiente
+  if (timeInMinutes >= nocheStart || timeInMinutes < nocheEnd) {
+    return TURNOS[2]; // noche
+  }
   
-  return TURNOS[1]; // fallback
+  // Turno mañana: desde 06:45 hasta 14:44
+  if (timeInMinutes >= mananaStart && timeInMinutes < mananaEnd) {
+    return TURNOS[0]; // mañana
+  }
+  
+  // Turno tarde: desde 14:45 hasta 23:44
+  if (timeInMinutes >= tardeStart && timeInMinutes < tardeEnd) {
+    return TURNOS[1]; // tarde
+  }
+  
+  // Fallback: si estamos en un momento "entre turnos" (no debería pasar)
+  // Por ejemplo, si hay un gap de 1 minuto entre turnos
+  // Devolver el siguiente turno que va a empezar
+  if (timeInMinutes < mananaStart) return TURNOS[2]; // noche (aún activo)
+  if (timeInMinutes < tardeStart) return TURNOS[0]; // mañana (aún activo)
+  return TURNOS[1]; // tarde
 };
 
 // Función para agrupar reservas por horas
@@ -221,8 +241,15 @@ export default function DashboardPage() {
         const { data: profile } = await supabase.from('profiles').select('display_name').eq('id', session.user.id).single();
         if(profile) setUser({ id: session.user.id, name: profile.display_name, isGuest: false });
       } else {
-        const guestData = localStorage.getItem('guestUser');
-        if (guestData) setUser(JSON.parse(guestData));
+        // Acceso seguro a localStorage
+        try {
+          if (typeof window !== 'undefined' && window.localStorage) {
+            const guestData = window.localStorage.getItem('guestUser');
+            if (guestData) setUser(JSON.parse(guestData));
+          }
+        } catch (error) {
+          console.warn('Error accediendo a localStorage:', error)
+        }
       }
     };
     fetchUserProfile();
@@ -551,7 +578,16 @@ export default function DashboardPage() {
   
   const handleLogout = async () => {
     if (user && !user.isGuest) await supabase.auth.signOut();
-    localStorage.removeItem('guestUser');
+    
+    // Eliminar localStorage de forma segura
+    try {
+      if (typeof window !== 'undefined' && window.localStorage) {
+        window.localStorage.removeItem('guestUser');
+      }
+    } catch (error) {
+      console.warn('Error eliminando datos de localStorage:', error)
+    }
+    
     toast.success('¡Hasta luego!');
     router.push('/auth/login');
   };

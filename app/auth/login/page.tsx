@@ -12,12 +12,25 @@ export default function LoginPage() {
 
   const handleGoogleLogin = async () => {
     setLoading(true)
-    const { error } = await supabase.auth.signInWithOAuth({
-      provider: 'google',
-      options: { redirectTo: `${location.origin}/auth/callback` },
-    })
-    if (error) {
-      toast.error('Error al iniciar con Google: ' + error.message)
+    try {
+      // Verificar que window está disponible
+      if (typeof window === 'undefined') {
+        toast.error('Error: entorno no válido')
+        setLoading(false)
+        return
+      }
+
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: { redirectTo: `${location.origin}/auth/callback` },
+      })
+      if (error) {
+        toast.error('Error al iniciar con Google: ' + error.message)
+        setLoading(false)
+      }
+    } catch (error) {
+      console.error('Error en login con Google:', error)
+      toast.error('Error inesperado al iniciar sesión')
       setLoading(false)
     }
   }
@@ -27,10 +40,22 @@ export default function LoginPage() {
       toast.error('Por favor, ingresa un nombre de al menos 3 caracteres.')
       return
     }
-    const guestUser = { id: `guest_${Date.now()}`, name: guestName.trim(), isGuest: true }
-    localStorage.setItem('guestUser', JSON.stringify(guestUser))
-    toast.success(`¡Bienvenido, ${guestName.trim()}!`)
-    router.push('/dashboard')
+    
+    try {
+      // Protección para localStorage
+      if (typeof window === 'undefined' || !window.localStorage) {
+        toast.error('Almacenamiento no disponible en este dispositivo')
+        return
+      }
+
+      const guestUser = { id: `guest_${Date.now()}`, name: guestName.trim(), isGuest: true }
+      window.localStorage.setItem('guestUser', JSON.stringify(guestUser))
+      toast.success(`¡Bienvenido, ${guestName.trim()}!`)
+      router.push('/dashboard')
+    } catch (error) {
+      console.error('Error guardando usuario invitado:', error)
+      toast.error('Error al guardar. Puede que tu navegador esté en modo privado.')
+    }
   }
 
   return (

@@ -16,7 +16,17 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
       
       // CASO 1: NO hay sesión de Supabase
       if (!session) {
-        const guestData = localStorage.getItem('guestUser');
+        // Verificar localStorage de forma segura
+        let guestData = null
+        try {
+          if (typeof window !== 'undefined' && window.localStorage) {
+            const data = window.localStorage.getItem('guestUser')
+            guestData = data ? JSON.parse(data) : null
+          }
+        } catch (error) {
+          console.warn('Error accediendo a localStorage:', error)
+        }
+
         if (!guestData) {
           // Si no hay ni sesión ni invitado, lo llevamos al login
           router.push('/auth/login');

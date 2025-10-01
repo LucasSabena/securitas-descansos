@@ -20,18 +20,26 @@ export function useNotifications(): NotificationHook {
   useEffect(() => {
     // Verificar soporte para notificaciones
     if (typeof window !== 'undefined') {
-      setIsSupported('Notification' in window && 'serviceWorker' in navigator)
-      setPermission(Notification.permission as NotificationPermission)
+      // iOS Safari tiene soporte limitado para notificaciones
+      const notificationSupported = 'Notification' in window
+      const swSupported = 'serviceWorker' in navigator
       
-      // Registrar service worker
-      if ('serviceWorker' in navigator) {
+      setIsSupported(notificationSupported && swSupported)
+      
+      if (notificationSupported) {
+        setPermission(Notification.permission as NotificationPermission)
+      }
+      
+      // Registrar service worker con manejo de errores robusto
+      if (swSupported) {
         navigator.serviceWorker.register('/sw.js')
           .then((registration) => {
             console.log('SW registrado:', registration)
             setServiceWorker(registration)
           })
           .catch((error) => {
-            console.error('Error registrando SW:', error)
+            console.warn('Error registrando SW (puede ser normal en iOS):', error)
+            // No mostrar error al usuario, ya que puede ser esperado en iOS
           })
       }
     }
@@ -44,6 +52,12 @@ export function useNotifications(): NotificationHook {
     }
 
     try {
+      // iOS Safari puede tener problemas con requestPermission
+      if (!('Notification' in window)) {
+        toast.error('Notificaciones no disponibles en este dispositivo')
+        return false
+      }
+
       const result = await Notification.requestPermission()
       setPermission(result as NotificationPermission)
       
@@ -59,7 +73,13 @@ export function useNotifications(): NotificationHook {
       }
     } catch (error) {
       console.error('Error solicitando permisos:', error)
-      toast.error('Error al solicitar permisos de notificación')
+      // Mensaje específico para iOS
+      const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent)
+      if (isIOS) {
+        toast.error('Las notificaciones push no están disponibles en iOS Safari')
+      } else {
+        toast.error('Error al solicitar permisos de notificación')
+      }
       return false
     }
   }
@@ -88,13 +108,18 @@ export function useNotifications(): NotificationHook {
       if (delay > 0 && delay < 24 * 60 * 60 * 1000) { // Máximo 24 horas
         // Usar setTimeout directo (más confiable para pruebas)
         setTimeout(() => {
-          if (Notification.permission === 'granted') {
-            new Notification('Descanso próximo', {
-              body: `Tu descanso "${title}" empezará en 5 minutos`,
-              icon: '/favicon.ico',
-              tag: `reminder-${reservaId}`,
-              requireInteraction: true
-            })
+          try {
+            if (Notification.permission === 'granted' && 'Notification' in window) {
+              new Notification('Descanso próximo', {
+                body: `Tu descanso "${title}" empezará en 5 minutos`,
+                icon: '/favicon.ico',
+                tag: `reminder-${reservaId}`,
+                requireInteraction: true
+              })
+            }
+          } catch (error) {
+            console.warn('Error mostrando notificación:', error)
+            // No mostrar toast para no interrumpir al usuario
           }
         }, delay)
         

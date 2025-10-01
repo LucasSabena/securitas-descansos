@@ -1,5 +1,38 @@
 # Migraciones de Supabase
 
+## ⚡ OPCIÓN RÁPIDA: Ejecutar TODO de una vez
+
+**Archivo:** `TODO_EN_UNO.sql`
+
+1. Ve a: https://supabase.com/dashboard/project/YOUR_PROJECT_ID/editor/sql
+2. Copia TODO el contenido de `TODO_EN_UNO.sql`
+3. Pega en el editor SQL
+4. Click "Run"
+5. Verifica que las 3 queries de verificación muestren resultados
+
+✅ **Ventajas:** 
+- Un solo copy-paste
+- Idempotente (se puede ejecutar múltiples veces)
+- Incluye verificación automática al final
+
+---
+
+## 📋 OPCIÓN PASO A PASO
+
+Si prefieres ejecutar paso por paso o ya ejecutaste algunos:
+
+1. **PASO_1_constraint.sql** - Constraint de duración máxima
+2. **PASO_2_function_daily_limit.sql** - Función límite diario
+3. **PASO_3_trigger_daily_limit.sql** - Trigger límite diario
+4. **PASO_4_function_overlap.sql** - Función solapamiento
+5. **PASO_5_trigger_overlap.sql** - Trigger solapamiento
+
+⚠️ **Si ya ejecutaste PASO_1 y dio error** `constraint already exists`:
+- Ejecuta `TODO_EN_UNO.sql` completo
+- O ejecuta los pasos 2-5 (el PASO_1 ya está aplicado)
+
+---
+
 ## Instrucciones para aplicar migraciones
 
 ### Opción 1: Supabase CLI (Recomendado)

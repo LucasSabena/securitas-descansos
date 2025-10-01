@@ -80,7 +80,7 @@ BEGIN
   FROM reservas
   WHERE 
     -- No contar la misma reserva en caso de UPDATE
-    id != COALESCE(NEW.id, '00000000-0000-0000-0000-000000000000'::UUID)
+    (NEW.id IS NULL OR id != NEW.id)
     -- Verificar solapamiento: nueva empieza antes de que termine existente Y termina después de que empiece existente
     AND NEW.start_time < end_time 
     AND NEW.end_time > start_time;

@@ -32,15 +32,30 @@ const MAX_MINUTES = 30;
 const getArgentinaTime = (): Date => {
   // Usar solo en el cliente para evitar problemas de hidratación
   if (typeof window === 'undefined') {
-    // En el servidor, usar UTC como fallback
-    return new Date();
+    return new Date(); // En el servidor, usar UTC como fallback
   }
   
-  const now = new Date();
-  // Convertir a Argentina (GMT-3)
-  const utc = now.getTime() + (now.getTimezoneOffset() * 60000);
-  const argTime = new Date(utc + (-3 * 3600000));
-  return argTime;
+  // Método más robusto compatible con iOS/Safari
+  try {
+    // Crear fecha en timezone de Argentina usando Intl
+    const argentinaTimeString = new Date().toLocaleString('en-US', {
+      timeZone: 'America/Argentina/Buenos_Aires',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: false
+    });
+    return new Date(argentinaTimeString);
+  } catch (error) {
+    // Fallback si Intl falla
+    console.error('Error getting Argentina time:', error);
+    const now = new Date();
+    const utc = now.getTime() + (now.getTimezoneOffset() * 60000);
+    return new Date(utc + (-3 * 3600000));
+  }
 };
 
 const getTurnoDateRange = (turno: Turno): { start: Date; end: Date } => {
@@ -268,13 +283,17 @@ export default function DashboardPage() {
   const handleDeleteReservation = useCallback(async (reservationId: string) => {
     if (!user) return;
     
+    // PROTECCIÓN: Guests no pueden borrar
+    if (user.isGuest) {
+      toast.error('⚠️ Funcionalidad de eliminación solo para usuarios con cuenta. Inicia sesión para poder gestionar tus descansos.', { duration: 5000 });
+      return;
+    }
+    
     // Verificar que la reserva pertenezca al usuario actual
     const reservaToDelete = allReservas.find(r => r.id === reservationId);
     if (!reservaToDelete) return;
     
-    const isMyReservation = user.isGuest 
-      ? reservaToDelete.user_name === user.name 
-      : reservaToDelete.user_id === user.id;
+    const isMyReservation = reservaToDelete.user_id === user.id;
     
     if (!isMyReservation) {
       toast.error('No puedes borrar reservas de otros usuarios');
@@ -321,7 +340,13 @@ export default function DashboardPage() {
       return;
     }
 
-    // Validar que no exceda el límite de minutos
+    // VALIDACIÓN CRÍTICA: Verificar límite de minutos (doble check por seguridad)
+    if (customDuration > MAX_MINUTES) {
+      toast.error(`⚠️ Duración inválida. El máximo es ${MAX_MINUTES} minutos.`);
+      setCustomDuration(10); // Reset a valor seguro
+      return;
+    }
+    
     if (minutesReserved + customDuration > MAX_MINUTES) {
       toast.error(`Solo puedes reservar ${MAX_MINUTES - minutesReserved} minutos más`);
       return;
@@ -344,7 +369,8 @@ export default function DashboardPage() {
     }
 
     // Verificar conflictos con reservas existentes (de TODOS los usuarios)
-    const conflictingReserva = filteredReservas.find(r => {
+    // CRÍTICO: usar allReservas, NO filteredReservas
+    const conflictingReserva = allReservas.find(r => {
       const existingStart = new Date(r.start_time);
       const existingEnd = new Date(r.end_time);
       const newStart = startTime;
@@ -435,7 +461,7 @@ export default function DashboardPage() {
       setCustomTime('');
       setCustomDuration(10);
     }
-  }, [user, customTime, customDuration, selectedTurno, minutesReserved, filteredReservas, supabase, notificationsEnabled, scheduleNotification]);
+  }, [user, customTime, customDuration, selectedTurno, minutesReserved, allReservas, supabase, notificationsEnabled, scheduleNotification]);
 
   const handleRepeatYesterday = useCallback(async () => {
     if (!user || !selectedTurno || yesterdayReservations.length === 0) return;
@@ -462,8 +488,8 @@ export default function DashboardPage() {
           continue;
         }
 
-        // Verificar conflictos
-        const hasConflict = filteredReservas.some(r => {
+        // Verificar conflictos con TODAS las reservas
+        const hasConflict = allReservas.some(r => {
           const existingStart = new Date(r.start_time).getTime();
           const existingEnd = new Date(r.end_time).getTime();
           const newStart = todayStart.getTime();
@@ -521,7 +547,7 @@ export default function DashboardPage() {
     } else {
       toast.error('No se pudieron repetir las reservas (conflictos de horario)');
     }
-  }, [user, selectedTurno, yesterdayReservations, filteredReservas, supabase, notificationsEnabled, scheduleNotification]);
+  }, [user, selectedTurno, yesterdayReservations, allReservas, supabase, notificationsEnabled, scheduleNotification]);
   
   const handleLogout = async () => {
     if (user && !user.isGuest) await supabase.auth.signOut();
@@ -805,8 +831,22 @@ export default function DashboardPage() {
                                 </p>
                               </div>
                               
-                              {/* Botón de eliminar solo para mis reservas */}
+                              {/* Botón de eliminar solo para usuarios autenticados */}
                               {isMyReservation && (() => {
+                                // Guests NO pueden borrar - mostrar icono informativo
+                                if (user.isGuest) {
+                                  return (
+                                    <button
+                                      onClick={() => toast.error('⚠️ Funcionalidad de eliminación solo para usuarios con cuenta. Inicia sesión para poder gestionar tus descansos.', { duration: 5000 })}
+                                      className="p-2 text-text-secondary hover:bg-border-default/30 rounded-lg transition-colors"
+                                      title="Solo usuarios con cuenta pueden borrar reservas"
+                                    >
+                                      <LockClosedIcon className="w-4 h-4" />
+                                    </button>
+                                  );
+                                }
+                                
+                                // Usuarios autenticados - validación anti-borrado
                                 const now = getArgentinaTime();
                                 const startTime = new Date(reserva.start_time);
                                 const timeUntilStart = startTime.getTime() - now.getTime();

@@ -10,16 +10,41 @@
   },
   "business_rules": {
     "reservations": {
+      "max_duration_per_reservation": "30 minutos",
+      "max_total_per_shift": "30 minutos totales por usuario por turno",
+      "overlap_prevention": {
+        "description": "Sistema de prevención de solapamiento de reservas",
+        "validation": [
+          "Client-side: Validar contra allReservas (NO filteredReservas)",
+          "Server-side: Trigger SQL check_reservation_overlap()",
+          "Método: Detectar si nueva.inicio < existente.fin AND nueva.fin > existente.inicio"
+        ]
+      },
       "deletion_policy": {
         "description": "Política de eliminación de reservas para prevenir abuso del sistema",
         "rules": [
           "Se puede borrar hasta 10 minutos antes del inicio",
           "Una vez iniciada la reserva, NO se puede borrar nunca",
           "Esto previene que usuarios cancelen y vuelvan a reservar el mismo día",
-          "Protege contra sabotaje entre usuarios"
+          "Protege contra sabotaje entre usuarios",
+          "GUESTS NO PUEDEN BORRAR: Solo usuarios autenticados pueden eliminar reservas"
         ],
         "implementation": "Validar tiempo restante usando getArgentinaTime()",
-        "time_zones": "Siempre usar GMT-3 (Argentina) para consistencia"
+        "time_zones": "Siempre usar GMT-3 (Argentina) para consistencia",
+        "guest_restrictions": "Guests ven icono de candado con mensaje educativo al intentar borrar"
+      },
+      "security": {
+        "client_validation": [
+          "Validar customDuration <= 30 antes de enviar",
+          "Validar minutesReserved + customDuration <= 30",
+          "Usar allReservas para detección de overlap (NO filteredReservas)"
+        ],
+        "server_validation": [
+          "Constraint SQL: check_max_duration (duración 1-30 min)",
+          "Trigger SQL: check_user_daily_limit (máximo 30 min por usuario/turno)",
+          "Trigger SQL: check_reservation_overlap (prevenir solapamiento)"
+        ],
+        "rationale": "Doble validación previene manipulación vía DevTools o requests directos"
       }
     }
   },
